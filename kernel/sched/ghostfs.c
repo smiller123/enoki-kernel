@@ -263,7 +263,7 @@ static ssize_t __cpu_set_write(struct kernfs_open_file *of, char *buf,
 		free_cpumask_var(cpus);
 		return err;
 	}
-	err = ghost_enclave_set_cpus(of_to_e(of), cpus);
+	//err = ghost_enclave_set_cpus(of_to_e(of), cpus);
 	free_cpumask_var(cpus);
 	return err ? err : bytes;
 }
@@ -366,90 +366,90 @@ static void destroy_enclave(struct kernfs_open_file *ctl_of)
 	ghost_destroy_enclave(e);
 }
 
-static struct ghost_sw_region *of_to_swr(struct kernfs_open_file *of)
-{
-	return of->kn->priv;
-}
+//static struct ghost_sw_region *of_to_swr(struct kernfs_open_file *of)
+//{
+//	return of->kn->priv;
+//}
+//
+///*
+// * swr_kns refcount the enclave, even though they point to the swr.  An swr will
+// * never be deleted until the enclave is released.
+// */
+//static int gf_swr_open(struct kernfs_open_file *of)
+//{
+//	struct ghost_sw_region *swr = of_to_swr(of);
+//
+//	kref_get(&swr->enclave->kref);
+//	return 0;
+//}
+//
+//static void gf_swr_release(struct kernfs_open_file *of)
+//{
+//	struct ghost_sw_region *swr = of_to_swr(of);
+//
+//	kref_put(&swr->enclave->kref, enclave_release);
+//}
+//
+//static int gf_swr_mmap(struct kernfs_open_file *of, struct vm_area_struct *vma)
+//{
+//	struct ghost_sw_region *swr = of_to_swr(of);
+//
+//	if (vma->vm_flags & VM_WRITE)
+//		return -EINVAL;
+//	vma->vm_flags &= ~VM_MAYWRITE;
+//
+//	return ghost_region_mmap(of->file, vma, swr->header, of->kn->attr.size);
+//}
 
-/*
- * swr_kns refcount the enclave, even though they point to the swr.  An swr will
- * never be deleted until the enclave is released.
- */
-static int gf_swr_open(struct kernfs_open_file *of)
-{
-	struct ghost_sw_region *swr = of_to_swr(of);
+//static struct kernfs_ops gf_ops_e_swr = {
+//	.open			= gf_swr_open,
+//	.release		= gf_swr_release,
+//	.mmap			= gf_swr_mmap,
+//};
 
-	kref_get(&swr->enclave->kref);
-	return 0;
-}
-
-static void gf_swr_release(struct kernfs_open_file *of)
-{
-	struct ghost_sw_region *swr = of_to_swr(of);
-
-	kref_put(&swr->enclave->kref, enclave_release);
-}
-
-static int gf_swr_mmap(struct kernfs_open_file *of, struct vm_area_struct *vma)
-{
-	struct ghost_sw_region *swr = of_to_swr(of);
-
-	if (vma->vm_flags & VM_WRITE)
-		return -EINVAL;
-	vma->vm_flags &= ~VM_MAYWRITE;
-
-	return ghost_region_mmap(of->file, vma, swr->header, of->kn->attr.size);
-}
-
-static struct kernfs_ops gf_ops_e_swr = {
-	.open			= gf_swr_open,
-	.release		= gf_swr_release,
-	.mmap			= gf_swr_mmap,
-};
-
-static int create_sw_region(struct kernfs_open_file *ctl_of, unsigned int id,
-			    unsigned int numa_node)
-{
-	struct ghost_enclave *e = of_to_e(ctl_of);
-	struct kernfs_node *dir, *swr_kn;
-	struct ghost_sw_region *swr;
-	char name[31];
-	int err;
-
-	dir = kernfs_find_and_get(e->enclave_dir, "sw_regions");
-	if (WARN_ON_ONCE(!dir))
-		return -EINVAL;
-
-	if (snprintf(name, sizeof(name), "sw_%u", id) >= sizeof(name)) {
-		err = -ENOSPC;
-		goto err_snprintf;
-	}
-
-	swr_kn = kernfs_create_file(dir, name, 0440, 0, &gf_ops_e_swr, e);
-	if (IS_ERR(swr_kn)) {
-		err = PTR_ERR(swr_kn);
-		goto err_create_kn;
-	}
-	/* swr_kn is inaccessible until kernfs_activate. */
-
-	swr = ghost_create_sw_region(e, id, numa_node);
-	if (IS_ERR(swr)) {
-		err = PTR_ERR(swr);
-		goto err_create_swr;
-	}
-
-	swr_kn->attr.size = swr->mmap_sz;
-	swr_kn->priv = swr;
-	kernfs_activate(swr_kn);
-
-	return 0;
-err_create_swr:
-	kernfs_remove(swr_kn);
-err_create_kn:
-err_snprintf:
-	kernfs_put(dir);
-	return err;
-}
+//static int create_sw_region(struct kernfs_open_file *ctl_of, unsigned int id,
+//			    unsigned int numa_node)
+//{
+//	struct ghost_enclave *e = of_to_e(ctl_of);
+//	struct kernfs_node *dir, *swr_kn;
+//	struct ghost_sw_region *swr;
+//	char name[31];
+//	int err;
+//
+//	dir = kernfs_find_and_get(e->enclave_dir, "sw_regions");
+//	if (WARN_ON_ONCE(!dir))
+//		return -EINVAL;
+//
+//	if (snprintf(name, sizeof(name), "sw_%u", id) >= sizeof(name)) {
+//		err = -ENOSPC;
+//		goto err_snprintf;
+//	}
+//
+//	//swr_kn = kernfs_create_file(dir, name, 0440, 0, &gf_ops_e_swr, e);
+//	//if (IS_ERR(swr_kn)) {
+//	//	err = PTR_ERR(swr_kn);
+//	//	goto err_create_kn;
+//	//}
+//	/* swr_kn is inaccessible until kernfs_activate. */
+//
+//	//swr = ghost_create_sw_region(e, id, numa_node);
+//	//if (IS_ERR(swr)) {
+//	//	err = PTR_ERR(swr);
+//	//	goto err_create_swr;
+//	//}
+//
+//	//swr_kn->attr.size = swr->mmap_sz;
+//	//swr_kn->priv = swr;
+//	//kernfs_activate(swr_kn);
+//
+//	return 0;
+//err_create_swr:
+//	kernfs_remove(swr_kn);
+//err_create_kn:
+//err_snprintf:
+//	kernfs_put(dir);
+//	return err;
+//}
 
 static ssize_t gf_ctl_write(struct kernfs_open_file *of, char *buf,
 			    size_t len, loff_t off)
@@ -468,10 +468,10 @@ static ssize_t gf_ctl_write(struct kernfs_open_file *of, char *buf,
 
 	if (!strcmp(buf, "destroy")) {
 		destroy_enclave(of);
-	} else if (sscanf(buf, "create sw_region %u %u", &arg1, &arg2) == 2) {
-		err = create_sw_region(of, arg1, arg2);
-		if (err)
-			return err;
+	//} else if (sscanf(buf, "create sw_region %u %u", &arg1, &arg2) == 2) {
+	//	err = create_sw_region(of, arg1, arg2);
+	//	if (err)
+	//		return err;
 	} else {
 		pr_err("%s: bad cmd :%s:", __func__, buf);
 		return -EINVAL;
@@ -491,19 +491,23 @@ static long gf_ctl_ioctl(struct kernfs_open_file *of, unsigned int cmd,
 	case GHOST_IOC_NULL:
 		return 0;
 	case GHOST_IOC_SW_GET_INFO:
-		return ghost_sw_get_info(e,
-				(struct ghost_ioc_sw_get_info __user *)arg);
+		return 0;
+		//return ghost_sw_get_info(e,
+		//		(struct ghost_ioc_sw_get_info __user *)arg);
 	case GHOST_IOC_SW_FREE:
-		return ghost_sw_free(e, (void __user *)arg);
+		return 0;
+		//return ghost_sw_free(e, (void __user *)arg);
 	case GHOST_IOC_CREATE_QUEUE:
+		//return 0;
 		return ghost_create_queue(e,
 				(struct ghost_ioc_create_queue __user *)arg);
 	case GHOST_IOC_ASSOC_QUEUE:
 		return ghost_associate_queue(
 				(struct ghost_ioc_assoc_queue __user *)arg);
 	case GHOST_IOC_SET_DEFAULT_QUEUE:
-		return ghost_set_default_queue(e,
-			(struct ghost_ioc_set_default_queue __user *)arg);
+		return 0;
+		//return ghost_set_default_queue(e,
+		//	(struct ghost_ioc_set_default_queue __user *)arg);
 	case GHOST_IOC_CONFIG_QUEUE_WAKEUP:
 		return ghost_config_queue_wakeup(
 			(struct ghost_ioc_config_queue_wakeup __user *)arg);
@@ -511,10 +515,10 @@ static long gf_ctl_ioctl(struct kernfs_open_file *of, unsigned int cmd,
 		return ghost_get_cpu_time(
 				(struct ghost_ioc_get_cpu_time __user *)arg);
 	case GHOST_IOC_COMMIT_TXN:
-		return ioctl_ghost_commit_txn(e,
+		return ioctl_ghost_commit_txn(
 				(struct ghost_ioc_commit_txn __user *)arg);
 	case GHOST_IOC_SYNC_GROUP_TXN:
-		return ghost_sync_group(e,
+		return ghost_sync_group(
 				(struct ghost_ioc_commit_txn __user *)arg);
 	case GHOST_IOC_TIMERFD_SETTIME:
 		return ghost_timerfd_settime(

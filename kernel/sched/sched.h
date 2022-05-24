@@ -229,8 +229,8 @@ extern bool ghost_produce_prev_msgs(struct rq *rq, struct task_struct *prev);
 extern struct ghost_enclave *ghost_create_enclave(void);
 extern void enclave_release(struct kref *k);
 extern void ghost_destroy_enclave(struct ghost_enclave *e);
-extern int ghost_enclave_set_cpus(struct ghost_enclave *e,
-				  const struct cpumask *cpus);
+//extern int ghost_enclave_set_cpus(struct ghost_enclave *e,
+//				  const struct cpumask *cpus);
 extern int ghost_region_mmap(struct file *file, struct vm_area_struct *vma,
 			     void *addr, ulong mapsize);
 extern int ghost_cpu_data_mmap(struct file *file, struct vm_area_struct *vma,
@@ -245,14 +245,14 @@ extern int ghost_sw_free(struct ghost_enclave *e,
 extern int ghost_create_queue(struct ghost_enclave *e,
 			      struct ghost_ioc_create_queue __user *arg);
 extern int ghost_associate_queue(struct ghost_ioc_assoc_queue __user *arg);
-extern int ghost_set_default_queue(struct ghost_enclave *e,
+extern int ghost_set_default_queue(
 			struct ghost_ioc_set_default_queue __user *arg);
 extern int ghost_config_queue_wakeup(
 			struct ghost_ioc_config_queue_wakeup __user *arg);
 extern int ghost_get_cpu_time(struct ghost_ioc_get_cpu_time __user *arg);
-extern int ioctl_ghost_commit_txn(struct ghost_enclave *e,
+extern int ioctl_ghost_commit_txn(
 				 struct ghost_ioc_commit_txn __user *arg);
-extern int ghost_sync_group(struct ghost_enclave *e,
+extern int ghost_sync_group(
 			    struct ghost_ioc_commit_txn __user *arg);
 extern int ghost_timerfd_settime(struct ghost_ioc_timerfd_settime __user *arg);
 extern struct ghost_enclave *ghost_fdget_enclave(int fd, struct fd *fd_to_put);
@@ -264,7 +264,7 @@ extern bool ghost_agent(const struct sched_attr *attr);
 extern int ghost_validate_sched_attr(const struct sched_attr *attr);
 extern int ghost_setscheduler(struct task_struct *p, struct rq *rq,
 			      const struct sched_attr *attr,
-			      struct ghost_enclave *new_e,
+		//	      struct ghost_enclave *new_e,
 			      int *reset_on_fork);
 extern int ghost_sched_fork(struct task_struct *p);
 extern void ghost_sched_cleanup_fork(struct task_struct *p);
@@ -309,7 +309,7 @@ extern void ghost_need_cpu_not_idle(struct rq *rq, struct task_struct *next,
 		struct task_struct *prev);
 extern void ghost_tick(struct rq *rq);
 extern int64_t ghost_alloc_gtid(struct task_struct *p);
-extern void ghost_initialize_status_word(struct task_struct *p);
+//extern void ghost_initialize_status_word(struct task_struct *p);
 extern void ghost_task_new(struct rq *rq, struct task_struct *p);
 extern void ghost_switchto(struct rq *rq, struct task_struct *prev,
 			   struct task_struct *next, int switchto_flags);
@@ -321,26 +321,26 @@ static inline void sched_ghost_entity_init(struct task_struct *p)
 	INIT_LIST_HEAD(&p->ghost.task_list);
 }
 
-static inline void ghost_sw_set_flag(struct ghost_status_word *sw,
-				     uint32_t flag) {
-	smp_store_release(&sw->flags, sw->flags | flag);
-}
-
-static inline void ghost_sw_clear_flag(struct ghost_status_word *sw,
-				       uint32_t flag) {
-	smp_store_release(&sw->flags, sw->flags & ~flag);
-}
-
-static inline void ghost_sw_set_time(struct ghost_status_word *sw,
-				     s64 time) {
-	/*
-	 * Do a relaxed store since userspace syncs with the release store to
-         * `sw->flags` for setting the oncpu bit in `ghost_sw_set_flag`. We set
-         * the time in this function before setting the oncpu bit, so we use
-         * that release store as a barrier.
-	 */
-	WRITE_ONCE(sw->switch_time, time);
-}
+//static inline void ghost_sw_set_flag(struct ghost_status_word *sw,
+//				     uint32_t flag) {
+//	smp_store_release(&sw->flags, sw->flags | flag);
+//}
+//
+//static inline void ghost_sw_clear_flag(struct ghost_status_word *sw,
+//				       uint32_t flag) {
+//	smp_store_release(&sw->flags, sw->flags & ~flag);
+//}
+//
+//static inline void ghost_sw_set_time(struct ghost_status_word *sw,
+//				     s64 time) {
+//	/*
+//	 * Do a relaxed store since userspace syncs with the release store to
+//         * `sw->flags` for setting the oncpu bit in `ghost_sw_set_flag`. We set
+//         * the time in this function before setting the oncpu bit, so we use
+//         * that release store as a barrier.
+//	 */
+//	WRITE_ONCE(sw->switch_time, time);
+//}
 
 static inline int ghost_schedattr_to_enclave_fd(const struct sched_attr *attr)
 {

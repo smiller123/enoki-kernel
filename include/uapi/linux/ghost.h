@@ -183,13 +183,13 @@ struct ghost_sw_region_header {
  * unnecessarily.  At our current size, that is one cache line per status word,
  * and two status words per cache line.
  */
-struct ghost_status_word {
-	uint32_t barrier;
-	uint32_t flags;
-	uint64_t gtid;
-	int64_t switch_time;	/* time at which task was context-switched onto CPU */
-	uint64_t runtime;	/* total time spent on the CPU in nsecs */
-} __attribute__((__aligned__(32)));
+//struct ghost_status_word {
+//	uint32_t barrier;
+//	uint32_t flags;
+//	uint64_t gtid;
+//	int64_t switch_time;	/* time at which task was context-switched onto CPU */
+//	uint64_t runtime;	/* total time spent on the CPU in nsecs */
+//} __attribute__((__aligned__(32)));
 
 #define GHOST_SW_F_INUSE	(1U << 0)    /* status_word in use */
 #define GHOST_SW_F_CANFREE	(1U << 1)    /* status_word can be freed */

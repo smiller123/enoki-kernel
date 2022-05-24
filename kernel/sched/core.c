@@ -6428,7 +6428,7 @@ change:
 	}
 	if (ghost_policy(policy) || ghost_policy(p->policy)) {
 		printk(KERN_INFO "setting ghost scheduler");
-		int error = ghost_setscheduler(p, rq, attr, new_e,
+		int error = ghost_setscheduler(p, rq, attr,
 					       &reset_on_fork);
 
 		if (error) {

@@ -87,7 +87,7 @@ static int agent_target_cpu(struct rq *rq);
 static inline bool ghost_txn_ready(int cpu);
 static bool _ghost_commit_pending_txn(int cpu, int where);
 static inline void ghost_claim_and_kill_txn(int cpu, enum ghost_txn_state err);
-static void ghost_commit_all_greedy_txns(void);
+//static void ghost_commit_all_greedy_txns(void);
 static void ghost_commit_pending_txn(int where);
 static void release_from_ghost(struct rq *rq, struct task_struct *p);
 static void ghost_wake_agent_on(int cpu);
@@ -101,8 +101,8 @@ void schedule_callback(struct rq *rq);
 struct rq *move_queued_task(struct rq *rq, struct rq_flags *rf,
 			    struct task_struct *p, int new_cpu);
 
-static void __enclave_remove_task(struct ghost_enclave *e,
-				  struct task_struct *p);
+//static void __enclave_remove_task(struct ghost_enclave *e,
+//				  struct task_struct *p);
 static int __sw_region_free(struct ghost_sw_region *region);
 static const struct file_operations queue_fops;
 
@@ -198,29 +198,29 @@ int unregister_ghost_agent(struct ghost_agent_type *agent)
 EXPORT_SYMBOL(unregister_ghost_agent);
 
 /* True if X and Y have the same enclave, including having no enclave. */
-static bool check_same_enclave(int cpu_x, int cpu_y)
-{
-	struct ghost_enclave *x, *y;
+//static bool check_same_enclave(int cpu_x, int cpu_y)
+//{
+//	struct ghost_enclave *x, *y;
+//
+//	if (WARN_ON_ONCE(cpu_x < 0 || cpu_y < 0
+//			 || cpu_x >= nr_cpu_ids || cpu_y >= nr_cpu_ids))
+//		return false;
+//
+//	if (cpu_x == cpu_y)
+//		return true;
+//
+//	rcu_read_lock();
+//	x = rcu_dereference(per_cpu(enclave, cpu_x));
+//	y = rcu_dereference(per_cpu(enclave, cpu_y));
+//	rcu_read_unlock();
+//
+//	return x == y;
+//}
 
-	if (WARN_ON_ONCE(cpu_x < 0 || cpu_y < 0
-			 || cpu_x >= nr_cpu_ids || cpu_y >= nr_cpu_ids))
-		return false;
-
-	if (cpu_x == cpu_y)
-		return true;
-
-	rcu_read_lock();
-	x = rcu_dereference(per_cpu(enclave, cpu_x));
-	y = rcu_dereference(per_cpu(enclave, cpu_y));
-	rcu_read_unlock();
-
-	return x == y;
-}
-
-static inline uint enclave_abi(struct ghost_enclave *e)
-{
-	return GHOST_VERSION;	/* for now all enclaves have the same abi */
-}
+//static inline uint enclave_abi(struct ghost_enclave *e)
+//{
+//	return GHOST_VERSION;	/* for now all enclaves have the same abi */
+//}
 
 /* enclave::is_dying */
 #define ENCLAVE_IS_DYING	(1U << 0)
@@ -294,93 +294,93 @@ static inline bool enclave_is_reapable(struct ghost_enclave *e)
  * are not preemptible.  It's safe to do a raw_spin_unlock, just like
  * double_lock_balance().
  */
-static void __do_enclave_work(struct rq *rq)
-{
-	struct enclave_work *ew;
-	struct ghost_enclave *e;
-	unsigned long irq_fl;
-	bool run_task_reaper;
-	unsigned int nr_decrefs;
+//static void __do_enclave_work(struct rq *rq)
+//{
+//	struct enclave_work *ew;
+//	struct ghost_enclave *e;
+//	unsigned long irq_fl;
+//	bool run_task_reaper;
+//	unsigned int nr_decrefs;
+//
+//	while ((ew = list_first_entry_or_null(&rq->ghost.enclave_work,
+//					      struct enclave_work, link))) {
+//		e = container_of(ew, struct ghost_enclave, ew);
+//		spin_lock_irqsave(&e->lock, irq_fl);
+//
+//		list_del_init(&ew->link);
+//
+//		run_task_reaper = ew->run_task_reaper;
+//		ew->run_task_reaper = false;
+//		nr_decrefs = ew->nr_decrefs;
+//		ew->nr_decrefs = 0;
+//
+//		spin_unlock_irqrestore(&e->lock, irq_fl);
+//		/*
+//		 * At this point, all that keeps e alive is the krefs passed
+//		 * with ew.
+//		 */
+//
+//		raw_spin_unlock(&rq->lock);
+//
+//		if (run_task_reaper) {
+//			/*
+//			 * Whoever set run_task_reaper increffed.  This is
+//			 * passed to task_reaper.  In theory, rq and task_reaper
+//			 * could be on another cpu, and it could run and decref.
+//			 * That could be the last ref on e.  This is fine - we
+//			 * only touch e if we have more krefs still.
+//			 */
+//			if (!schedule_work(&e->task_reaper))
+//				kref_put(&e->kref, enclave_release);
+//		}
+//		for (; nr_decrefs > 0; nr_decrefs--)
+//			kref_put(&e->kref, enclave_release);
+//
+//		raw_spin_lock(&rq->lock);
+//	}
+//}
 
-	while ((ew = list_first_entry_or_null(&rq->ghost.enclave_work,
-					      struct enclave_work, link))) {
-		e = container_of(ew, struct ghost_enclave, ew);
-		spin_lock_irqsave(&e->lock, irq_fl);
-
-		list_del_init(&ew->link);
-
-		run_task_reaper = ew->run_task_reaper;
-		ew->run_task_reaper = false;
-		nr_decrefs = ew->nr_decrefs;
-		ew->nr_decrefs = 0;
-
-		spin_unlock_irqrestore(&e->lock, irq_fl);
-		/*
-		 * At this point, all that keeps e alive is the krefs passed
-		 * with ew.
-		 */
-
-		raw_spin_unlock(&rq->lock);
-
-		if (run_task_reaper) {
-			/*
-			 * Whoever set run_task_reaper increffed.  This is
-			 * passed to task_reaper.  In theory, rq and task_reaper
-			 * could be on another cpu, and it could run and decref.
-			 * That could be the last ref on e.  This is fine - we
-			 * only touch e if we have more krefs still.
-			 */
-			if (!schedule_work(&e->task_reaper))
-				kref_put(&e->kref, enclave_release);
-		}
-		for (; nr_decrefs > 0; nr_decrefs--)
-			kref_put(&e->kref, enclave_release);
-
-		raw_spin_lock(&rq->lock);
-	}
-}
-
-static void submit_enclave_work(struct ghost_enclave *e, struct rq *rq,
-				bool run_task_reaper, int nr_decrefs)
-{
-	struct enclave_work *ew = &e->ew;
-	bool need_work = false;
-
-	VM_BUG_ON(nr_decrefs < 0);
-	WARN_ON_ONCE(run_task_reaper && !enclave_is_reapable(e));
-
-	lockdep_assert_held(&rq->lock);
-	lockdep_assert_held(&e->lock);
-
-	if (run_task_reaper && !ew->run_task_reaper) {
-		kref_get(&e->kref);
-		ew->run_task_reaper = true;
-		need_work = true;
-	}
-	if (nr_decrefs) {
-		ew->nr_decrefs += nr_decrefs;
-		need_work = true;
-	}
-	if (!need_work) {
-		/*
-		 * Note that if we have added no work, then we've added no
-		 * krefs, and cannot submit ew to the rq's enclave_work list.
-		 */
-		return;
-	}
-	if (!list_empty(&ew->link)) {
-		/* Already queued on some rq, but maybe not this one! */
-		return;
-	}
-	list_add(&ew->link, &rq->ghost.enclave_work);
-	/* OK to resubmit ew_head, so long as the func stays the same */
-	queue_balance_callback(rq, &rq->ghost.ew_head, __do_enclave_work);
-}
+//static void submit_enclave_work(struct ghost_enclave *e, struct rq *rq,
+//				bool run_task_reaper, int nr_decrefs)
+//{
+//	struct enclave_work *ew = &e->ew;
+//	bool need_work = false;
+//
+//	VM_BUG_ON(nr_decrefs < 0);
+//	WARN_ON_ONCE(run_task_reaper && !enclave_is_reapable(e));
+//
+//	lockdep_assert_held(&rq->lock);
+//	lockdep_assert_held(&e->lock);
+//
+//	if (run_task_reaper && !ew->run_task_reaper) {
+//		kref_get(&e->kref);
+//		ew->run_task_reaper = true;
+//		need_work = true;
+//	}
+//	if (nr_decrefs) {
+//		ew->nr_decrefs += nr_decrefs;
+//		need_work = true;
+//	}
+//	if (!need_work) {
+//		/*
+//		 * Note that if we have added no work, then we've added no
+//		 * krefs, and cannot submit ew to the rq's enclave_work list.
+//		 */
+//		return;
+//	}
+//	if (!list_empty(&ew->link)) {
+//		/* Already queued on some rq, but maybe not this one! */
+//		return;
+//	}
+//	list_add(&ew->link, &rq->ghost.enclave_work);
+//	/* OK to resubmit ew_head, so long as the func stays the same */
+//	queue_balance_callback(rq, &rq->ghost.ew_head, __do_enclave_work);
+//}
 
 void init_ghost_rq(struct ghost_rq *ghost_rq)
 {
 	INIT_LIST_HEAD(&ghost_rq->tasks);
-	INIT_LIST_HEAD(&ghost_rq->enclave_work);
+	//INIT_LIST_HEAD(&ghost_rq->enclave_work);
 }
 
 static inline gtid_t gtid(struct task_struct *p)
@@ -825,41 +825,41 @@ static void set_next_task_ghost(struct rq *rq, struct task_struct *p,
  *
  * Enclave and RQ are *unlocked*.
  */
-static bool check_runnable_timeout(struct ghost_enclave *e, struct rq *rq)
-{
-	struct task_struct *p;
-	struct rq_flags rf;
-	ktime_t timeout;
-	bool ok = true;
-
-	timeout = READ_ONCE(e->max_unscheduled);
-
-	if (!timeout)
-		return ok;
-
-	rq_lock_irqsave(rq, &rf);
-
-	/*
-	 * The ghost.tasks list is sorted; earliest non-zero runnable time
-	 * first.
-	 */
-	list_for_each_entry(p, &rq->ghost.tasks, ghost.run_list) {
-		if (is_agent(rq, p))
-			continue;
-		if (!p->ghost.last_runnable_at)
-			continue;
-		if (ktime_before(ktime_add_safe(p->ghost.last_runnable_at,
-						timeout),
-				 ktime_get())) {
-			ok = false;
-		}
-
-		break;
-	}
-	rq_unlock_irqrestore(rq, &rf);
-
-	return ok;
-}
+//static bool check_runnable_timeout(struct ghost_enclave *e, struct rq *rq)
+//{
+//	struct task_struct *p;
+//	struct rq_flags rf;
+//	ktime_t timeout;
+//	bool ok = true;
+//
+//	//timeout = READ_ONCE(e->max_unscheduled);
+//
+//	//if (!timeout)
+//	//	return ok;
+//
+//	rq_lock_irqsave(rq, &rf);
+//
+//	/*
+//	 * The ghost.tasks list is sorted; earliest non-zero runnable time
+//	 * first.
+//	 */
+//	list_for_each_entry(p, &rq->ghost.tasks, ghost.run_list) {
+//		if (is_agent(rq, p))
+//			continue;
+//		if (!p->ghost.last_runnable_at)
+//			continue;
+//		if (ktime_before(ktime_add_safe(p->ghost.last_runnable_at,
+//						timeout),
+//				 ktime_get())) {
+//			ok = false;
+//		}
+//
+//		break;
+//	}
+//	rq_unlock_irqrestore(rq, &rf);
+//
+//	return ok;
+//}
 
 /*
  * Called from the timer tick handler after dropping rq->lock.  Called
@@ -867,25 +867,25 @@ static bool check_runnable_timeout(struct ghost_enclave *e, struct rq *rq)
  */
 void ghost_tick(struct rq *rq)
 {
-	struct ghost_enclave *e;
+	//struct ghost_enclave *e;
 
-	rcu_read_lock();
-	e = rcu_dereference(*this_cpu_ptr(&enclave));
-	if (e) {
-		if (READ_ONCE(e->commit_at_tick))
-			ghost_commit_all_greedy_txns();
-		if (!check_runnable_timeout(e, rq)) {
-			kref_get(&e->kref);
-			if (!schedule_work(&e->enclave_destroyer)) {
-				/*
-				 * Safe since it is not the last reference, due
-				 * to RCU protecting per_cpu(enclave).
-				 */
-				kref_put(&e->kref, enclave_release);
-			}
-		}
-	}
-	rcu_read_unlock();
+	//rcu_read_lock();
+	//e = rcu_dereference(*this_cpu_ptr(&enclave));
+	//if (e) {
+	//	//if (READ_ONCE(e->commit_at_tick))
+	//	//	ghost_commit_all_greedy_txns();
+	//	if (!check_runnable_timeout(e, rq)) {
+	//		kref_get(&e->kref);
+	//		if (!schedule_work(&e->enclave_destroyer)) {
+	//			/*
+	//			 * Safe since it is not the last reference, due
+	//			 * to RCU protecting per_cpu(enclave).
+	//			 */
+	//			kref_put(&e->kref, enclave_release);
+	//		}
+	//	}
+	//}
+	//rcu_read_unlock();
 }
 
 /*
@@ -965,7 +965,7 @@ static int balance_ghost(struct rq *rq, struct task_struct *prev,
 		rq->ghost.pnt_bpf_once = false;
 		/* If there is a BPF program, this will unlock the RQ */
 		rq->ghost.in_pnt_bpf = true;
-		ghost_bpf_pnt(agent->ghost.enclave, rq, rf);
+		//ghost_bpf_pnt(agent->ghost.enclave, rq, rf);
 		rq->ghost.in_pnt_bpf = false;
 	}
 
@@ -1005,10 +1005,10 @@ static int select_task_rq_ghost(struct task_struct *p, int cpu, int wake_flags)
 	 * This can be configured using 'p->ghost.enclave->wake_on_waker_cpu'
 	 * and the default is to keep the task on the same CPU it last ran on.
 	 */
-	if (READ_ONCE(p->ghost.enclave->wake_on_waker_cpu))
-		p->ghost.twi.wake_up_cpu = waker_cpu;
-	else
-		p->ghost.twi.wake_up_cpu = task_cpu(p);
+	//if (READ_ONCE(p->ghost.enclave->wake_on_waker_cpu))
+	//	p->ghost.twi.wake_up_cpu = waker_cpu;
+	//else
+	//	p->ghost.twi.wake_up_cpu = task_cpu(p);
 
 	p->ghost.twi.waker_cpu = waker_cpu;
 	p->ghost.twi.last_ran_cpu = task_cpu(p);
@@ -1018,15 +1018,16 @@ static int select_task_rq_ghost(struct task_struct *p, int cpu, int wake_flags)
 
 static inline bool task_is_dead(struct rq *rq, struct task_struct *p)
 {
-	lockdep_assert_held(&rq->lock);
+	//lockdep_assert_held(&rq->lock);
 
-	VM_BUG_ON(!task_has_ghost_policy(p));
+	//VM_BUG_ON(!task_has_ghost_policy(p));
 
 	/*
 	 * A ghost task always has a valid 'status_word' when it is alive
 	 * so use that as a proxy to detect a dead task.
 	 */
-	return p->ghost.status_word == NULL;
+	//return p->ghost.status_word == NULL;
+	return false;
 }
 
 static void set_txn_state(int *ptr, enum ghost_txn_state val)
@@ -1872,64 +1873,64 @@ static inline void queue_incref(struct ghost_queue *q)
 }
 
 /* Hold e->lock and the cpu_rsvp lock */
-static void __enclave_add_cpu(struct ghost_enclave *e, int cpu)
-{
-	struct ghost_txn *txn;
-
-	VM_BUG_ON(!spin_is_locked(&e->lock));
-	VM_BUG_ON(!spin_is_locked(&cpu_rsvp));
-
-	VM_BUG_ON(cpumask_test_cpu(cpu, &cpus_in_enclave));
-	VM_BUG_ON(cpumask_test_cpu(cpu, &e->cpus));
-
-	txn = &e->cpu_data[cpu]->txn;
-	/*
-	 * Reinitialize in case this txn was used by this enclave before, such
-	 * as if a cpu was removed and readded.
-	 */
-	memset(txn, 0, sizeof(*txn));
-
-	txn->cpu = cpu;
-	txn->version = GHOST_TXN_VERSION;
-	txn->u.sync_group_owner = -1;
-	txn->state = GHOST_TXN_COMPLETE;
-
-	cpumask_set_cpu(cpu, &cpus_in_enclave);
-	cpumask_set_cpu(cpu, &e->cpus);
-	rcu_assign_pointer(per_cpu(enclave, cpu), e);
-	rcu_assign_pointer(per_cpu(ghost_txn, cpu), txn);
-}
+//static void __enclave_add_cpu(struct ghost_enclave *e, int cpu)
+//{
+//	struct ghost_txn *txn;
+//
+//	VM_BUG_ON(!spin_is_locked(&e->lock));
+//	VM_BUG_ON(!spin_is_locked(&cpu_rsvp));
+//
+//	VM_BUG_ON(cpumask_test_cpu(cpu, &cpus_in_enclave));
+//	VM_BUG_ON(cpumask_test_cpu(cpu, &e->cpus));
+//
+//	txn = &e->cpu_data[cpu]->txn;
+//	/*
+//	 * Reinitialize in case this txn was used by this enclave before, such
+//	 * as if a cpu was removed and readded.
+//	 */
+//	memset(txn, 0, sizeof(*txn));
+//
+//	txn->cpu = cpu;
+//	txn->version = GHOST_TXN_VERSION;
+//	txn->u.sync_group_owner = -1;
+//	txn->state = GHOST_TXN_COMPLETE;
+//
+//	cpumask_set_cpu(cpu, &cpus_in_enclave);
+//	cpumask_set_cpu(cpu, &e->cpus);
+//	rcu_assign_pointer(per_cpu(enclave, cpu), e);
+//	rcu_assign_pointer(per_cpu(ghost_txn, cpu), txn);
+//}
 
 /* Hold e->lock.  Caller must synchronize_rcu(). */
-static void __enclave_unpublish_cpu(struct ghost_enclave *e, int cpu)
-{
-	VM_BUG_ON(!spin_is_locked(&e->lock));
-
-	rcu_assign_pointer(per_cpu(enclave, cpu), NULL);
-	rcu_assign_pointer(per_cpu(ghost_txn, cpu), NULL);
-}
-
-/* Hold e->lock and the cpu_rsvp lock. */
-static void __enclave_return_cpu(struct ghost_enclave *e, int cpu)
-{
-	VM_BUG_ON(!spin_is_locked(&e->lock));
-	VM_BUG_ON(!spin_is_locked(&cpu_rsvp));
-
-	VM_BUG_ON(!cpumask_test_cpu(cpu, &cpus_in_enclave));
-	VM_BUG_ON(!cpumask_test_cpu(cpu, &e->cpus));
-
-	cpumask_clear_cpu(cpu, &cpus_in_enclave);
-	cpumask_clear_cpu(cpu, &e->cpus);
-}
+//static void __enclave_unpublish_cpu(struct ghost_enclave *e, int cpu)
+//{
+//	VM_BUG_ON(!spin_is_locked(&e->lock));
+//
+//	rcu_assign_pointer(per_cpu(enclave, cpu), NULL);
+//	rcu_assign_pointer(per_cpu(ghost_txn, cpu), NULL);
+//}
+//
+///* Hold e->lock and the cpu_rsvp lock. */
+//static void __enclave_return_cpu(struct ghost_enclave *e, int cpu)
+//{
+//	VM_BUG_ON(!spin_is_locked(&e->lock));
+//	VM_BUG_ON(!spin_is_locked(&cpu_rsvp));
+//
+//	VM_BUG_ON(!cpumask_test_cpu(cpu, &cpus_in_enclave));
+//	VM_BUG_ON(!cpumask_test_cpu(cpu, &e->cpus));
+//
+//	cpumask_clear_cpu(cpu, &cpus_in_enclave);
+//	cpumask_clear_cpu(cpu, &e->cpus);
+//}
 
 /* Hold e->lock and the cpu_rsvp lock.  Caller must synchronize_rcu(). */
-static void __enclave_remove_cpu(struct ghost_enclave *e, int cpu)
-{
-	__enclave_unpublish_cpu(e, cpu);
-	/* cpu no longer belongs to any enclave */
-	__enclave_return_cpu(e, cpu);
-	/* cpu can no be assigned to another enclave */
-}
+//static void __enclave_remove_cpu(struct ghost_enclave *e, int cpu)
+//{
+//	__enclave_unpublish_cpu(e, cpu);
+//	/* cpu no longer belongs to any enclave */
+//	__enclave_return_cpu(e, cpu);
+//	/* cpu can no be assigned to another enclave */
+//}
 
 /*
  * Undo anything done in ghost_create_enclave().  We also free the SW regions
@@ -1943,8 +1944,8 @@ static void enclave_actual_release(struct work_struct *w)
 	struct ghost_sw_region *swr, *temp;
 	int cpu;
 
-	list_for_each_entry_safe(swr, temp, &e->sw_region_list, list)
-		__sw_region_free(swr);
+	//list_for_each_entry_safe(swr, temp, &e->sw_region_list, list)
+		//__sw_region_free(swr);
 
 	/*
 	 * Any inhibited tasks should have been "released" as a side-effect
@@ -1975,62 +1976,62 @@ void enclave_release(struct kref *k)
 		WARN_ONCE(1, "enclave released twice?!?");
 }
 
-static void enclave_reap_tasks(struct work_struct *work)
-{
-	struct ghost_enclave *e = container_of(work, struct ghost_enclave,
-					       task_reaper);
-	unsigned long irq_fl;
-	struct task_struct *t, *prev = NULL;
-	int ret = 0;
-	static const struct sched_param param = { .sched_priority = 0 };
-
-	spin_lock_irqsave(&e->lock, irq_fl);
-	WARN_ON_ONCE(!enclave_is_reapable(e));
-
-	/*
-	 * The moment we unlock, the task could exit.  We can't lock the task
-	 * either, since the lock ordering is pi_lock->e_lock.  Once we let go
-	 * of e->lock, we can't walk the list either.  Assuming setscheduler
-	 * succeeds, the task should be gone next time we look.  That might not
-	 * be true for TASK_DEAD, so we can skip those.
-	 *
-	 * The only error condition here is if we see the same non-dead task on
-	 * the list after calling setscheduler.  We'll abort and possibly leak
-	 * resources, but at least we won't lock up the system.  We exit the
-	 * 'next_item' loop when:
-	 * - the list is empty,
-	 * - the list only contains TASK_DEAD, or
-	 * - we abort
-	 */
-next_item:
-	list_for_each_entry(t, &e->task_list, ghost.task_list) {
-		if (t->state == TASK_DEAD)
-			continue;
-		if (t == prev) {
-			WARN(1, "Reaper saw %d again, aborting!", t->pid);
-			break;
-		}
-		prev = t;
-
-		get_task_struct(t);
-		spin_unlock_irqrestore(&e->lock, irq_fl);
-
-		ret = sched_setscheduler_nocheck(t, SCHED_NORMAL, &param);
-
-		put_task_struct(t);
-		spin_lock_irqsave(&e->lock, irq_fl);
-
-		WARN_ONCE(ret && ret != -ESRCH,
-			  "Failed to setsched pid %d, ret %d, state 0x%lx)!",
-			  t->pid, ret, t->state);
-
-		goto next_item;
-	}
-
-	spin_unlock_irqrestore(&e->lock, irq_fl);
-
-	kref_put(&e->kref, enclave_release);
-}
+//static void enclave_reap_tasks(struct work_struct *work)
+//{
+//	struct ghost_enclave *e = container_of(work, struct ghost_enclave,
+//					       task_reaper);
+//	unsigned long irq_fl;
+//	struct task_struct *t, *prev = NULL;
+//	int ret = 0;
+//	static const struct sched_param param = { .sched_priority = 0 };
+//
+//	spin_lock_irqsave(&e->lock, irq_fl);
+//	WARN_ON_ONCE(!enclave_is_reapable(e));
+//
+//	/*
+//	 * The moment we unlock, the task could exit.  We can't lock the task
+//	 * either, since the lock ordering is pi_lock->e_lock.  Once we let go
+//	 * of e->lock, we can't walk the list either.  Assuming setscheduler
+//	 * succeeds, the task should be gone next time we look.  That might not
+//	 * be true for TASK_DEAD, so we can skip those.
+//	 *
+//	 * The only error condition here is if we see the same non-dead task on
+//	 * the list after calling setscheduler.  We'll abort and possibly leak
+//	 * resources, but at least we won't lock up the system.  We exit the
+//	 * 'next_item' loop when:
+//	 * - the list is empty,
+//	 * - the list only contains TASK_DEAD, or
+//	 * - we abort
+//	 */
+//next_item:
+//	list_for_each_entry(t, &e->task_list, ghost.task_list) {
+//		if (t->state == TASK_DEAD)
+//			continue;
+//		if (t == prev) {
+//			WARN(1, "Reaper saw %d again, aborting!", t->pid);
+//			break;
+//		}
+//		prev = t;
+//
+//		get_task_struct(t);
+//		spin_unlock_irqrestore(&e->lock, irq_fl);
+//
+//		ret = sched_setscheduler_nocheck(t, SCHED_NORMAL, &param);
+//
+//		put_task_struct(t);
+//		spin_lock_irqsave(&e->lock, irq_fl);
+//
+//		WARN_ONCE(ret && ret != -ESRCH,
+//			  "Failed to setsched pid %d, ret %d, state 0x%lx)!",
+//			  t->pid, ret, t->state);
+//
+//		goto next_item;
+//	}
+//
+//	spin_unlock_irqrestore(&e->lock, irq_fl);
+//
+//	kref_put(&e->kref, enclave_release);
+//}
 
 /* Helper work, which we can kick from IRQ context. */
 static void enclave_destroyer(struct work_struct *work)
@@ -2059,7 +2060,7 @@ struct ghost_enclave *ghost_create_enclave(void)
 	INIT_LIST_HEAD(&e->task_list);
 	INIT_LIST_HEAD(&e->inhibited_task_list);
 	INIT_LIST_HEAD(&e->ew.link);
-	INIT_WORK(&e->task_reaper, enclave_reap_tasks);
+	//INIT_WORK(&e->task_reaper, enclave_reap_tasks);
 	INIT_WORK(&e->enclave_actual_release, enclave_actual_release);
 	INIT_WORK(&e->enclave_destroyer, enclave_destroyer);
 
@@ -2154,13 +2155,13 @@ void ghost_destroy_enclave(struct ghost_enclave *e)
 		struct rq *rq = cpu_rq(cpu);
 		struct task_struct *agent;
 
-		if (!rq->ghost.agent) {
-			spin_lock(&cpu_rsvp);
-			__enclave_remove_cpu(e, cpu);
-			spin_unlock(&cpu_rsvp);
-			continue;
-		}
-		__enclave_unpublish_cpu(e, cpu);
+		//if (!rq->ghost.agent) {
+		//	spin_lock(&cpu_rsvp);
+		//	__enclave_remove_cpu(e, cpu);
+		//	spin_unlock(&cpu_rsvp);
+		//	continue;
+		//}
+		//__enclave_unpublish_cpu(e, cpu);
 		rq->ghost.agent_remove_enclave_cpu = true;
 		/*
 		 * We can't force_sig().  The task might be exiting and losing
@@ -2200,8 +2201,8 @@ void ghost_destroy_enclave(struct ghost_enclave *e)
 	spin_unlock_irqrestore(&e->lock, flags);
 
 	kref_get(&e->kref);	/* Reaper gets a kref */
-	if (!schedule_work(&e->task_reaper))
-		kref_put(&e->kref, enclave_release);
+	//if (!schedule_work(&e->task_reaper))
+	//	kref_put(&e->kref, enclave_release);
 
 	/*
 	 * Removes the enclave and all of its files from ghostfs.  There may
@@ -2218,71 +2219,71 @@ void ghost_destroy_enclave(struct ghost_enclave *e)
  * Returns an error code on failure and does not change the enclave.  Will fail
  * if a cpu is in another enclave.
  */
-int ghost_enclave_set_cpus(struct ghost_enclave *e, const struct cpumask *cpus)
-{
-	unsigned long flags;
-	unsigned int cpu;
-	int ret = 0;
-	cpumask_var_t add, del;
-
-	if (!alloc_cpumask_var(&add, GFP_KERNEL))
-		return -ENOMEM;
-	if (!alloc_cpumask_var(&del, GFP_KERNEL)) {
-		free_cpumask_var(add);
-		return -ENOMEM;
-	}
-
-	spin_lock_irqsave(&e->lock, flags);
-
-	if (enclave_is_dying(e)) {
-		ret = -EXDEV;
-		goto out_e;
-	}
-
-	cpumask_andnot(add, cpus, &e->cpus);
-	cpumask_andnot(del, &e->cpus, cpus);
-
-	for_each_cpu(cpu, del) {
-		/*
-		 * No need for an rq lock to read ghost.agent.  Both the enclave
-		 * and the rq locks are required to *write* rq->ghost.agent.
-		 */
-		if (cpu_rq(cpu)->ghost.agent) {
-			ret = -EEXIST;
-			goto out_e;
-		}
-	}
-
-	spin_lock(&cpu_rsvp);
-
-	if (cpumask_intersects(add, &cpus_in_enclave)) {
-		ret = -EBUSY;
-		goto out_rsvp;
-	}
-	for_each_cpu(cpu, add) {
-		if (!cpu_online(cpu)) {
-			ret = -ENODEV;
-			goto out_rsvp;
-		}
-	}
-
-	for_each_cpu(cpu, add)
-		__enclave_add_cpu(e, cpu);
-	for_each_cpu(cpu, del)
-		__enclave_remove_cpu(e, cpu);
-
-out_rsvp:
-	spin_unlock(&cpu_rsvp);
-out_e:
-	spin_unlock_irqrestore(&e->lock, flags);
-
-	synchronize_rcu();	/* Required after unpublishing a cpu */
-
-	free_cpumask_var(add);
-	free_cpumask_var(del);
-
-	return ret;
-}
+//int ghost_enclave_set_cpus(struct ghost_enclave *e, const struct cpumask *cpus)
+//{
+//	unsigned long flags;
+//	unsigned int cpu;
+//	int ret = 0;
+//	cpumask_var_t add, del;
+//
+//	if (!alloc_cpumask_var(&add, GFP_KERNEL))
+//		return -ENOMEM;
+//	if (!alloc_cpumask_var(&del, GFP_KERNEL)) {
+//		free_cpumask_var(add);
+//		return -ENOMEM;
+//	}
+//
+//	spin_lock_irqsave(&e->lock, flags);
+//
+//	if (enclave_is_dying(e)) {
+//		ret = -EXDEV;
+//		goto out_e;
+//	}
+//
+//	cpumask_andnot(add, cpus, &e->cpus);
+//	cpumask_andnot(del, &e->cpus, cpus);
+//
+//	for_each_cpu(cpu, del) {
+//		/*
+//		 * No need for an rq lock to read ghost.agent.  Both the enclave
+//		 * and the rq locks are required to *write* rq->ghost.agent.
+//		 */
+//		if (cpu_rq(cpu)->ghost.agent) {
+//			ret = -EEXIST;
+//			goto out_e;
+//		}
+//	}
+//
+//	spin_lock(&cpu_rsvp);
+//
+//	if (cpumask_intersects(add, &cpus_in_enclave)) {
+//		ret = -EBUSY;
+//		goto out_rsvp;
+//	}
+//	for_each_cpu(cpu, add) {
+//		if (!cpu_online(cpu)) {
+//			ret = -ENODEV;
+//			goto out_rsvp;
+//		}
+//	}
+//
+//	for_each_cpu(cpu, add)
+//		__enclave_add_cpu(e, cpu);
+//	for_each_cpu(cpu, del)
+//		__enclave_remove_cpu(e, cpu);
+//
+//out_rsvp:
+//	spin_unlock(&cpu_rsvp);
+//out_e:
+//	spin_unlock_irqrestore(&e->lock, flags);
+//
+//	synchronize_rcu();	/* Required after unpublishing a cpu */
+//
+//	free_cpumask_var(add);
+//	free_cpumask_var(del);
+//
+//	return ret;
+//}
 
 void __init init_sched_ghost_class(void)
 {
@@ -2304,24 +2305,24 @@ void __init init_sched_ghost_class(void)
  *
  * Caller must call ghost_fdput_enclave with e and &fd_to_put, even on error.
  */
-struct ghost_enclave *ghost_fdget_enclave(int fd, struct fd *fd_to_put)
-{
-	*fd_to_put = fdget(fd);
-	if (!fd_to_put->file)
-		return NULL;
-	return ghostfs_ctl_to_enclave(fd_to_put->file);
-}
-
-/*
- * Pairs with calls to ghost_fdget_enclave().  You can't call this while holding
- * the rq lock.
- */
-void ghost_fdput_enclave(struct ghost_enclave *e, struct fd *fd_to_put)
-{
-	if (e)
-		ghostfs_put_enclave_ctl(fd_to_put->file);
-	fdput(*fd_to_put);
-}
+//struct ghost_enclave *ghost_fdget_enclave(int fd, struct fd *fd_to_put)
+//{
+//	*fd_to_put = fdget(fd);
+//	if (!fd_to_put->file)
+//		return NULL;
+//	return ghostfs_ctl_to_enclave(fd_to_put->file);
+//}
+//
+///*
+// * Pairs with calls to ghost_fdget_enclave().  You can't call this while holding
+// * the rq lock.
+// */
+//void ghost_fdput_enclave(struct ghost_enclave *e, struct fd *fd_to_put)
+//{
+//	if (e)
+//		ghostfs_put_enclave_ctl(fd_to_put->file);
+//	fdput(*fd_to_put);
+//}
 
 struct ghost_queue *fd_to_queue(struct fd f)
 {
@@ -2333,182 +2334,182 @@ struct ghost_queue *fd_to_queue(struct fd f)
 }
 EXPORT_SYMBOL(fd_to_queue);
 
-static void enclave_add_task(struct ghost_enclave *e, struct task_struct *p)
-{
-	ulong flags;
-
-	if (p->ghost.agent)
-		return;
-	spin_lock_irqsave(&e->lock, flags);
-	if (enclave_is_reapable(e)) {
-		/*
-		 * The task entered as the enclave was dying, and likely will
-		 * miss the reaper.
-		 */
-		submit_enclave_work(e, task_rq(p), /*run_task_reaper=*/true, 0);
-	}
-	WARN_ON_ONCE(!list_empty(&p->ghost.task_list));
-	list_add_tail(&p->ghost.task_list, &e->task_list);
-	e->nr_tasks++;
-	spin_unlock_irqrestore(&e->lock, flags);
-}
+//static void enclave_add_task(struct ghost_enclave *e, struct task_struct *p)
+//{
+//	ulong flags;
+//
+//	if (p->ghost.agent)
+//		return;
+//	spin_lock_irqsave(&e->lock, flags);
+//	if (enclave_is_reapable(e)) {
+//		/*
+//		 * The task entered as the enclave was dying, and likely will
+//		 * miss the reaper.
+//		 */
+//		submit_enclave_work(e, task_rq(p), /*run_task_reaper=*/true, 0);
+//	}
+//	WARN_ON_ONCE(!list_empty(&p->ghost.task_list));
+//	list_add_tail(&p->ghost.task_list, &e->task_list);
+//	e->nr_tasks++;
+//	spin_unlock_irqrestore(&e->lock, flags);
+//}
 
 /* Hold the enclave lock */
-static void __enclave_remove_task(struct ghost_enclave *e,
-				  struct task_struct *p)
-{
-	lockdep_assert_held(&e->lock);
+//static void __enclave_remove_task(struct ghost_enclave *e,
+//				  struct task_struct *p)
+//{
+//	lockdep_assert_held(&e->lock);
+//
+//	if (p->ghost.agent)
+//		return;
+//	WARN_ON_ONCE(list_empty(&p->ghost.task_list));
+//	list_del_init(&p->ghost.task_list);
+//	e->nr_tasks--;
+//}
 
-	if (p->ghost.agent)
-		return;
-	WARN_ON_ONCE(list_empty(&p->ghost.task_list));
-	list_del_init(&p->ghost.task_list);
-	e->nr_tasks--;
-}
+//static void enclave_add_sw_region(struct ghost_enclave *e,
+//				  struct ghost_sw_region *region)
+//{
+//	ulong flags;
+//
+//	spin_lock_irqsave(&e->lock, flags);
+//	list_add_tail(&region->list, &e->sw_region_list);
+//	spin_unlock_irqrestore(&e->lock, flags);
+//}
 
-static void enclave_add_sw_region(struct ghost_enclave *e,
-				  struct ghost_sw_region *region)
-{
-	ulong flags;
+//static inline struct ghost_status_word *
+//first_status_word(struct ghost_sw_region_header *h)
+//{
+//	return (struct ghost_status_word *)((char *)h + h->start);
+//}
+//
+//static inline bool status_word_inuse(struct ghost_status_word *sw)
+//{
+//	return sw->flags & GHOST_SW_F_INUSE;
+//}
+//
+//static inline bool status_word_canfree(struct ghost_status_word *sw)
+//{
+//	return sw->flags & GHOST_SW_F_CANFREE;
+//}
+//
+//static inline bool status_word_allocated(struct ghost_status_word *sw)
+//{
+//	return sw->flags & GHOST_SW_F_ALLOCATED;
+//}
 
-	spin_lock_irqsave(&e->lock, flags);
-	list_add_tail(&region->list, &e->sw_region_list);
-	spin_unlock_irqrestore(&e->lock, flags);
-}
+//static int free_status_word_locked(struct ghost_enclave *e,
+//				   struct ghost_status_word *sw)
+//{
+//	int error = -ENOENT;
+//	struct ghost_sw_region *region;
+//	struct ghost_sw_region_header *header;
+//	struct ghost_status_word *first, *limit;
+//
+//	VM_BUG_ON(!spin_is_locked(&e->lock));
+//	list_for_each_entry(region, &e->sw_region_list, list) {
+//		header = region->header;
+//		first = first_status_word(header);
+//		limit = &first[header->capacity];
+//		if (sw >= first && sw < limit) {
+//			if (!status_word_allocated(sw)) {
+//				/*
+//				 * Trying to free an already free status word?
+//				 */
+//				error = -EALREADY;
+//			} else {
+//				memset(sw, 0, sizeof(struct ghost_status_word));
+//				header->available++;
+//				error = 0;	/* success */
+//			}
+//			break;
+//		}
+//	}
+//	return error;
+//}
 
-static inline struct ghost_status_word *
-first_status_word(struct ghost_sw_region_header *h)
-{
-	return (struct ghost_status_word *)((char *)h + h->start);
-}
+//static struct ghost_status_word *lookup_status_word_locked(
+//		struct ghost_enclave *e, uint32_t id, uint32_t index)
+//{
+//	struct ghost_sw_region *region;
+//	struct ghost_sw_region_header *header;
+//	struct ghost_status_word *sw = NULL;
+//
+//	VM_BUG_ON(!spin_is_locked(&e->lock));
+//	list_for_each_entry(region, &e->sw_region_list, list) {
+//		header = region->header;
+//		if (header->id == id) {
+//			if (index < header->capacity)
+//				sw = first_status_word(header) + index;
+//			break;
+//		}
+//	}
+//	return sw;
+//}
 
-static inline bool status_word_inuse(struct ghost_status_word *sw)
-{
-	return sw->flags & GHOST_SW_F_INUSE;
-}
+//static struct ghost_status_word *
+//alloc_status_word_locked(struct ghost_enclave *e)
+//{
+//	struct ghost_sw_region *region;
+//	struct ghost_sw_region_header *header = NULL;
+//	struct ghost_status_word *sw, *found = NULL;
+//	uint32_t n;
+//
+//	VM_BUG_ON(!spin_is_locked(&e->lock));
+//
+//	/* Look for a sw_region that has at least one free status_word. */
+//	list_for_each_entry(region, &e->sw_region_list, list) {
+//		if (region->header->available) {
+//			header = region->header;    /* got one */
+//			break;
+//		}
+//	}
+//
+//	/* No free slots available in any status_word region. */
+//	if (!header)
+//		goto done;
+//
+//	sw = first_status_word(header);
+//	for (n = 0; n < header->capacity; n++) {
+//		found = &sw[region->alloc_scan_start++];
+//		/* Wrap around to the start if we are past the end. */
+//		if (region->alloc_scan_start >= header->capacity)
+//			region->alloc_scan_start = 0;
+//
+//		/*
+//		 * If this slot is free then claim it and adjust 'available'.
+//		 */
+//		if (!status_word_allocated(found)) {
+//			found->flags = GHOST_SW_F_ALLOCATED;
+//			header->available--;
+//			break;
+//		}
+//	}
+//	VM_BUG_ON(n >= header->capacity);
+//done:
+//	return found;
+//}
 
-static inline bool status_word_canfree(struct ghost_status_word *sw)
-{
-	return sw->flags & GHOST_SW_F_CANFREE;
-}
-
-static inline bool status_word_allocated(struct ghost_status_word *sw)
-{
-	return sw->flags & GHOST_SW_F_ALLOCATED;
-}
-
-static int free_status_word_locked(struct ghost_enclave *e,
-				   struct ghost_status_word *sw)
-{
-	int error = -ENOENT;
-	struct ghost_sw_region *region;
-	struct ghost_sw_region_header *header;
-	struct ghost_status_word *first, *limit;
-
-	VM_BUG_ON(!spin_is_locked(&e->lock));
-	list_for_each_entry(region, &e->sw_region_list, list) {
-		header = region->header;
-		first = first_status_word(header);
-		limit = &first[header->capacity];
-		if (sw >= first && sw < limit) {
-			if (!status_word_allocated(sw)) {
-				/*
-				 * Trying to free an already free status word?
-				 */
-				error = -EALREADY;
-			} else {
-				memset(sw, 0, sizeof(struct ghost_status_word));
-				header->available++;
-				error = 0;	/* success */
-			}
-			break;
-		}
-	}
-	return error;
-}
-
-static struct ghost_status_word *lookup_status_word_locked(
-		struct ghost_enclave *e, uint32_t id, uint32_t index)
-{
-	struct ghost_sw_region *region;
-	struct ghost_sw_region_header *header;
-	struct ghost_status_word *sw = NULL;
-
-	VM_BUG_ON(!spin_is_locked(&e->lock));
-	list_for_each_entry(region, &e->sw_region_list, list) {
-		header = region->header;
-		if (header->id == id) {
-			if (index < header->capacity)
-				sw = first_status_word(header) + index;
-			break;
-		}
-	}
-	return sw;
-}
-
-static struct ghost_status_word *
-alloc_status_word_locked(struct ghost_enclave *e)
-{
-	struct ghost_sw_region *region;
-	struct ghost_sw_region_header *header = NULL;
-	struct ghost_status_word *sw, *found = NULL;
-	uint32_t n;
-
-	VM_BUG_ON(!spin_is_locked(&e->lock));
-
-	/* Look for a sw_region that has at least one free status_word. */
-	list_for_each_entry(region, &e->sw_region_list, list) {
-		if (region->header->available) {
-			header = region->header;    /* got one */
-			break;
-		}
-	}
-
-	/* No free slots available in any status_word region. */
-	if (!header)
-		goto done;
-
-	sw = first_status_word(header);
-	for (n = 0; n < header->capacity; n++) {
-		found = &sw[region->alloc_scan_start++];
-		/* Wrap around to the start if we are past the end. */
-		if (region->alloc_scan_start >= header->capacity)
-			region->alloc_scan_start = 0;
-
-		/*
-		 * If this slot is free then claim it and adjust 'available'.
-		 */
-		if (!status_word_allocated(found)) {
-			found->flags = GHOST_SW_F_ALLOCATED;
-			header->available--;
-			break;
-		}
-	}
-	VM_BUG_ON(n >= header->capacity);
-done:
-	return found;
-}
-
-void ghost_initialize_status_word(struct task_struct *p)
-{
-	struct ghost_status_word *sw = p->ghost.status_word;
-
-	if (WARN_ON_ONCE(!p->ghost.status_word))
-		return;
-
-	if (WARN_ON_ONCE(sw->flags != GHOST_SW_F_ALLOCATED))
-		return;
-
-	sw->gtid = gtid(p);
-	sw->barrier = 0;
-	sw->runtime = 0;
-
-	/*
-	 * Order is important to ensure that agent observes a fully formed
-	 * status_word when discovering tasks from the status_word region.
-	 */
-	ghost_sw_set_flag(sw, GHOST_SW_F_INUSE);
-}
+//void ghost_initialize_status_word(struct task_struct *p)
+//{
+//	struct ghost_status_word *sw = p->ghost.status_word;
+//
+//	if (WARN_ON_ONCE(!p->ghost.status_word))
+//		return;
+//
+//	if (WARN_ON_ONCE(sw->flags != GHOST_SW_F_ALLOCATED))
+//		return;
+//
+//	sw->gtid = gtid(p);
+//	sw->barrier = 0;
+//	sw->runtime = 0;
+//
+//	/*
+//	 * Order is important to ensure that agent observes a fully formed
+//	 * status_word when discovering tasks from the status_word region.
+//	 */
+//	ghost_sw_set_flag(sw, GHOST_SW_F_INUSE);
+//}
 
 int64_t ghost_alloc_gtid(struct task_struct *p)
 {
@@ -2538,18 +2539,20 @@ int64_t ghost_alloc_gtid(struct task_struct *p)
  * - it is protected by 'p->pi_lock' (called via sched_setscheduler).
  * - it is being created (called via sched_fork).
  */
-static int __ghost_prep_task(struct ghost_enclave *e, struct task_struct *p,
-			     struct ghost_queue *q, bool forked,
+//static int __ghost_prep_task(struct ghost_enclave *e, struct task_struct *p,
+static int __ghost_prep_task(struct task_struct *p,
+			     //struct ghost_queue *q, bool forked,
+			     bool forked,
 			     struct ghost_agent_type *agent_type)
 {
-	struct ghost_status_word *sw;
+	//struct ghost_status_word *sw;
 	int error = 0;
 
-	WARN_ON_ONCE(p->ghost.status_word);
+	//WARN_ON_ONCE(p->ghost.status_word);
 	WARN_ON_ONCE(p->ghost.dst_q);
-	WARN_ON_ONCE(p->ghost.enclave);
+	//WARN_ON_ONCE(p->ghost.enclave);
 
-	lockdep_assert_held(&e->lock);
+	//lockdep_assert_held(&e->lock);
 
 	/*
 	 * Clean up state from a previous incarnation (e.g. ghost->cfs->ghost).
@@ -2561,10 +2564,10 @@ static int __ghost_prep_task(struct ghost_enclave *e, struct task_struct *p,
 	 * enclave's kref.  However, it is possible for the enclave to die
 	 * before we get enqueued (see uses of `new_task` and ghost_task_new()).
 	 */
-	if (enclave_is_dying(e)) {
-		error = -EXDEV;
-		goto done;
-	}
+	//if (enclave_is_dying(e)) {
+	//	error = -EXDEV;
+	//	goto done;
+	//}
 
 	/*
 	 * If msg inhibition is in effect then make sure that the task does
@@ -2578,53 +2581,53 @@ static int __ghost_prep_task(struct ghost_enclave *e, struct task_struct *p,
 	 * the status_word is freed from the original enclave we may not have
 	 * access to the function that produces TASK_NEW in the new ABI.
 	 */
-	if (p->inhibit_task_msgs) {
-		/*
-		 * 'inhibit_task_msgs' is used as a boolean but it actually
-		 * holds the abi of the enclave the task departed from.
-		 */
-		uint old_abi = p->inhibit_task_msgs;
-		if (old_abi != enclave_abi(e)) {
-			error = -EINVAL;
-			goto done;
-		}
-	}
+	//if (p->inhibit_task_msgs) {
+	//	/*
+	//	 * 'inhibit_task_msgs' is used as a boolean but it actually
+	//	 * holds the abi of the enclave the task departed from.
+	//	 */
+	//	uint old_abi = p->inhibit_task_msgs;
+	//	if (old_abi != enclave_abi(e)) {
+	//		error = -EINVAL;
+	//		goto done;
+	//	}
+	//}
 
-	if (q) {
-		/*
-		 * It's possible for a client task to have no queue: it may have
-		 * arrived before an agent set the default queue during an agent
-		 * update.
-		 *
-		 * However, agent tasks should have provided some queue: either
-		 * explicitly or the default queue.  We handle this case in
-		 * ghost_prep_agent().
-		 */
-		queue_incref(q);
-	}
-	p->ghost.dst_q = q;
+	//if (q) {
+	//	/*
+	//	 * It's possible for a client task to have no queue: it may have
+	//	 * arrived before an agent set the default queue during an agent
+	//	 * update.
+	//	 *
+	//	 * However, agent tasks should have provided some queue: either
+	//	 * explicitly or the default queue.  We handle this case in
+	//	 * ghost_prep_agent().
+	//	 */
+	//	queue_incref(q);
+	//}
+	//p->ghost.dst_q = q;
 
 	/* Allocate a status_word */
-	sw = alloc_status_word_locked(e);
-	if (sw == NULL) {
-		error = -ENOMEM;
-		goto done;
-	}
+	//sw = alloc_status_word_locked(e);
+	//if (sw == NULL) {
+	//	error = -ENOMEM;
+	//	goto done;
+	//}
 
-	kref_get(&e->kref);
-	p->ghost.enclave = e;
-	p->ghost.status_word = sw;
+	//kref_get(&e->kref);
+	//p->ghost.enclave = e;
+	//p->ghost.status_word = sw;
 	p->ghost.new_task = forked;
 	p->ghost.agent_type = agent_type;
 
-	if (!forked) {
-		ghost_initialize_status_word(p);
-	} else {
+	//if (!forked) {
+		//ghost_initialize_status_word(p);
+	//} else {
 		/*
 		 * Caller will initialize status_word after allocating gtid
 		 * (see copy_process).
 		 */
-	}
+	//}
 done:
 	if (error) {
 		if (p->ghost.dst_q) {
@@ -2632,10 +2635,10 @@ done:
 			p->ghost.dst_q = NULL;
 		}
 
-		if (p->ghost.status_word) {
-			free_status_word_locked(e, p->ghost.status_word);
-			p->ghost.status_word = NULL;
-		}
+		//if (p->ghost.status_word) {
+		//	free_status_word_locked(e, p->ghost.status_word);
+		//	p->ghost.status_word = NULL;
+		//}
 	}
 	return error;
 }
@@ -2648,33 +2651,33 @@ done:
  * task requires enclave to be locked whereas ungating msgs requires
  * that no locks are held).
  */
-struct task_struct *__enclave_remove_inhibited_task(struct ghost_enclave *e,
-						    gtid_t gtid)
-{
-	struct task_struct *p;
-
-	if (kref_read(&e->kref)) {
-		lockdep_assert_held(&e->lock);
-	} else {
-		/*
-		 * No more references to the enclave (called from
-		 * enclave_actual_release()).
-		 */
-	}
-
-	/*
-	 * N.B. cannot use find_task_by_gtid() to do the {gtid->task_struct}
-	 * lookup here since that function expects to be called in an agent
-	 * context.
-	 */
-	list_for_each_entry(p, &e->inhibited_task_list, inhibited_task_list) {
-		if (p->gtid == gtid) {
-			list_del_init(&p->inhibited_task_list);
-			return p;
-		}
-	}
-	return NULL;
-}
+//struct task_struct *__enclave_remove_inhibited_task(struct ghost_enclave *e,
+//						    gtid_t gtid)
+//{
+//	struct task_struct *p;
+//
+//	if (kref_read(&e->kref)) {
+//		lockdep_assert_held(&e->lock);
+//	} else {
+//		/*
+//		 * No more references to the enclave (called from
+//		 * enclave_actual_release()).
+//		 */
+//	}
+//
+//	/*
+//	 * N.B. cannot use find_task_by_gtid() to do the {gtid->task_struct}
+//	 * lookup here since that function expects to be called in an agent
+//	 * context.
+//	 */
+//	list_for_each_entry(p, &e->inhibited_task_list, inhibited_task_list) {
+//		if (p->gtid == gtid) {
+//			list_del_init(&p->inhibited_task_list);
+//			return p;
+//		}
+//	}
+//	return NULL;
+//}
 
 static void ghost_uninhibit_task_msgs(struct task_struct *p)
 {
@@ -2695,7 +2698,7 @@ static void ghost_uninhibit_task_msgs(struct task_struct *p)
 		p->inhibit_task_msgs = 0;	/* open the gate */
 
 		if (ghost_class(p->sched_class)) {
-			WARN_ON_ONCE(old_abi != enclave_abi(p->ghost.enclave));
+			//WARN_ON_ONCE(old_abi != enclave_abi(p->ghost.enclave));
 			if (p->ghost.new_task) {
 				/*
 				 * Task is oncpu and will produce TASK_NEW on
@@ -2755,80 +2758,80 @@ done:
  * GHOST_SW_F_CANFREE state.  Userspace may have failed to free them, due to a
  * crash.
  */
-static int __sw_region_free(struct ghost_sw_region *swr)
-{
-	struct ghost_sw_region_header *header = swr->header;
-	struct ghost_status_word *sw;
-	struct task_struct *p;
+//static int __sw_region_free(struct ghost_sw_region *swr)
+//{
+//	struct ghost_sw_region_header *header = swr->header;
+//	struct ghost_status_word *sw;
+//	struct task_struct *p;
+//
+//	/*
+//	 * Enclave is destroyed so scan all status words to find tasks
+//	 * where msg gating is in effect (and then turn it off because
+//	 * any agent that could have been handling msgs from an earlier
+//	 * incarnation is dead).
+//	 */
+//	for (sw = first_status_word(header);
+//	     sw < first_status_word(header) + header->capacity; sw++) {
+//		/*
+//		 * inuse  canfree
+//		 *   0       0		empty slot
+//		 *   0       1		not expected (see WARN below)
+//		 *   1       0		not expected (see WARN below)
+//		 *   1       1		task died or departed (either due to
+//		 *			task_reaper or organically while the
+//		 *			enclave was being destroyed).
+//		 */
+//		if (!status_word_inuse(sw)) {
+//			WARN_ON_ONCE(status_word_canfree(sw));
+//			continue;
+//		}
+//
+//		if (WARN_ON_ONCE(!status_word_canfree(sw)))
+//			continue;
+//
+//		if (!(sw->flags & GHOST_SW_TASK_MSG_GATED)) {
+//			/*
+//			 * task died while enclave was being destroyed or a
+//			 * misbehaving agent did not free status word in its
+//			 * TASK_DEAD handler.
+//			 */
+//			continue;
+//		}
+//
+//		p = __enclave_remove_inhibited_task(swr->enclave, sw->gtid);
+//		if (WARN_ON_ONCE(!p))
+//			continue;
+//
+//		ghost_uninhibit_task_msgs(p);
+//	}
+//
+//	list_del(&swr->list);
+//
+//	vfree(header);
+//	kfree(swr);
+//
+//	/* XXX memcg uncharge */
+//
+//	return 0;
+//}
 
-	/*
-	 * Enclave is destroyed so scan all status words to find tasks
-	 * where msg gating is in effect (and then turn it off because
-	 * any agent that could have been handling msgs from an earlier
-	 * incarnation is dead).
-	 */
-	for (sw = first_status_word(header);
-	     sw < first_status_word(header) + header->capacity; sw++) {
-		/*
-		 * inuse  canfree
-		 *   0       0		empty slot
-		 *   0       1		not expected (see WARN below)
-		 *   1       0		not expected (see WARN below)
-		 *   1       1		task died or departed (either due to
-		 *			task_reaper or organically while the
-		 *			enclave was being destroyed).
-		 */
-		if (!status_word_inuse(sw)) {
-			WARN_ON_ONCE(status_word_canfree(sw));
-			continue;
-		}
-
-		if (WARN_ON_ONCE(!status_word_canfree(sw)))
-			continue;
-
-		if (!(sw->flags & GHOST_SW_TASK_MSG_GATED)) {
-			/*
-			 * task died while enclave was being destroyed or a
-			 * misbehaving agent did not free status word in its
-			 * TASK_DEAD handler.
-			 */
-			continue;
-		}
-
-		p = __enclave_remove_inhibited_task(swr->enclave, sw->gtid);
-		if (WARN_ON_ONCE(!p))
-			continue;
-
-		ghost_uninhibit_task_msgs(p);
-	}
-
-	list_del(&swr->list);
-
-	vfree(header);
-	kfree(swr);
-
-	/* XXX memcg uncharge */
-
-	return 0;
-}
-
-static size_t calculate_sw_region_size(void)
-{
-	/*
-	 * Arbitrary number, but if we subtract off the swr header, we're
-	 * likely to get close to the number we want when we PAGE_ALIGN.
-	 */
-	#define GHOST_NR_SW_ELEMS (65536 - \
-		DIV_ROUND_UP(sizeof(struct ghost_sw_region_header), \
-			     sizeof(struct ghost_status_word)))
-	size_t size;
-
-	size = sizeof(struct ghost_sw_region_header);
-	size += GHOST_NR_SW_ELEMS * sizeof(struct ghost_status_word);
-	size = PAGE_ALIGN(size);
-
-	return size;
-}
+//static size_t calculate_sw_region_size(void)
+//{
+//	/*
+//	 * Arbitrary number, but if we subtract off the swr header, we're
+//	 * likely to get close to the number we want when we PAGE_ALIGN.
+//	 */
+//	#define GHOST_NR_SW_ELEMS (65536 - \
+//		DIV_ROUND_UP(sizeof(struct ghost_sw_region_header), \
+//			     sizeof(struct ghost_status_word)))
+//	size_t size;
+//
+//	size = sizeof(struct ghost_sw_region_header);
+//	size += GHOST_NR_SW_ELEMS * sizeof(struct ghost_status_word);
+//	size = PAGE_ALIGN(size);
+//
+//	return size;
+//}
 
 /*
  * Returns a pointer to the region.  Once created, a SW region will not be
@@ -2836,54 +2839,56 @@ static size_t calculate_sw_region_size(void)
  *
  * Returns an ERR_PTR on error.
  */
-struct ghost_sw_region *ghost_create_sw_region(struct ghost_enclave *e,
-					       unsigned int id,
-					       unsigned int node)
-{
-	struct ghost_sw_region *swr;
-	struct ghost_sw_region_header *h;
+//struct ghost_sw_region *ghost_create_sw_region(struct ghost_enclave *e,
+//					       unsigned int id,
+//					       unsigned int node)
+//{
+//	struct ghost_sw_region *swr;
+//	struct ghost_sw_region_header *h;
+//
+//	if (node < 0 || node >= nr_node_ids || !node_online(node))
+//		return ERR_PTR(-ENODEV);
+//
+//	swr = kzalloc_node(sizeof(struct ghost_sw_region), GFP_KERNEL, node);
+//	if (!swr)
+//		return ERR_PTR(-ENOMEM);
+//
+//	INIT_LIST_HEAD(&swr->list);
+//	swr->mmap_sz = calculate_sw_region_size();
+//	swr->header = vmalloc_user_node_flags(swr->mmap_sz, node, GFP_KERNEL);
+//	if (!swr->header) {
+//		kfree(swr);
+//		return ERR_PTR(-ENOMEM);
+//	}
+//
+//	h = swr->header;
+//	h->id = id;
+//	h->numa_node = node;
+//	h->version = GHOST_SW_REGION_VERSION;
+//	h->start = sizeof(struct ghost_sw_region_header);
+//	h->capacity = (swr->mmap_sz - h->start) /
+//		sizeof(struct ghost_status_word);
+//	h->available = h->capacity;
+//
+//	enclave_add_sw_region(e, swr);
+//	swr->enclave = e;	/* weak reference */
+//
+//	/* XXX memcg charge */
+//
+//	return swr;
+//}
 
-	if (node < 0 || node >= nr_node_ids || !node_online(node))
-		return ERR_PTR(-ENODEV);
-
-	swr = kzalloc_node(sizeof(struct ghost_sw_region), GFP_KERNEL, node);
-	if (!swr)
-		return ERR_PTR(-ENOMEM);
-
-	INIT_LIST_HEAD(&swr->list);
-	swr->mmap_sz = calculate_sw_region_size();
-	swr->header = vmalloc_user_node_flags(swr->mmap_sz, node, GFP_KERNEL);
-	if (!swr->header) {
-		kfree(swr);
-		return ERR_PTR(-ENOMEM);
-	}
-
-	h = swr->header;
-	h->id = id;
-	h->numa_node = node;
-	h->version = GHOST_SW_REGION_VERSION;
-	h->start = sizeof(struct ghost_sw_region_header);
-	h->capacity = (swr->mmap_sz - h->start) /
-		sizeof(struct ghost_status_word);
-	h->available = h->capacity;
-
-	enclave_add_sw_region(e, swr);
-	swr->enclave = e;	/* weak reference */
-
-	/* XXX memcg charge */
-
-	return swr;
-}
-
-static int ghost_prep_task(struct ghost_enclave *e, struct task_struct *p,
+//static int ghost_prep_task(struct ghost_enclave *e, struct task_struct *p,
+static int ghost_prep_task(struct task_struct *p,
 			   bool forked, struct ghost_agent_type *agent_type)
 {
 	int error;
 	unsigned long irq_fl;
 
-	spin_lock_irqsave(&e->lock, irq_fl);
-	error = __ghost_prep_task(e, p, e->def_q, forked, agent_type);
-	spin_unlock_irqrestore(&e->lock, irq_fl);
+	//spin_lock_irqsave(&e->lock, irq_fl);
+	//error = __ghost_prep_task(e, p, e->def_q, forked, agent_type);
+	error = __ghost_prep_task(p, forked, agent_type);
+	//spin_unlock_irqrestore(&e->lock, irq_fl);
 
 	return error;
 }
@@ -2891,84 +2896,84 @@ static int ghost_prep_task(struct ghost_enclave *e, struct task_struct *p,
 /*
  * 'p' and 'rq' are both locked.
  */
-static int ghost_prep_agent(struct ghost_enclave *e, struct task_struct *p,
-			    struct rq *rq, struct ghost_queue *q)
-{
-	int ret = 0;
-
-	lockdep_assert_held(&rq->lock);
-	lockdep_assert_held(&p->pi_lock);
-
-	WARN_ON_ONCE(!capable(CAP_SYS_NICE));
-
-	/*
-	 * Bail if the task wants to be an agent but there is already
-	 * an agent associated with this runqueue.
-	 */
-	if (rq->ghost.agent != NULL)
-		return -EBUSY;
-
-	/*
-	 * Clean up old transactions.  Once this cpu has an agent, an old
-	 * transaction could succeed and turn into a latched task and start
-	 * running.
-	 *
-	 * You may be wondering why we do this here in addition to when the old
-	 * agent exited.  It's possible for a global agent from an older agent
-	 * process to write a transaction *after* that cpu's agent task exited.
-	 */
-	ghost_claim_and_kill_txn(rq->cpu, GHOST_TXN_NO_AGENT);
-
-	/* We hold the rq lock, which is already irqsaved. */
-	spin_lock(&e->lock);
-
-	if (!cpumask_test_cpu(rq->cpu, &e->cpus)) {
-		ret = -ENODEV;
-		goto out;
-	}
-	if (!q) {
-		/*
-		 * Agents typically pass in their own queue, but if not they get
-		 * the def_q (typically for tests).  But they must have *some*
-		 * queue.
-		 */
-		if (!e->def_q) {
-			ret = -ENXIO;
-			goto out;
-		}
-		q = e->def_q;
-	}
-
-	ret = __ghost_prep_task(e, p, q, /*forked=*/false, 0);
-	if (ret)
-		goto out;
-
-	p->ghost.agent = true;
-	//ghost_sw_set_flag(p->ghost.status_word, GHOST_SW_TASK_IS_AGENT);
-
-	/*
-	 * The agent is not in the ghost class yet, but it will be before the RQ
-	 * lock is unlocked.
-	 *
-	 * We set this now so that if you hold the enclave lock and a cpu
-	 * belongs to the enclave, then you can *inspect* that cpu's
-	 * rq->ghost.agent.  Setting or clearing it requires both the enclave
-	 * lock and the RQ lock.
-	 */
-	WARN_ON(rq->ghost.agent || rq->ghost.blocked_in_run);
-	rq->ghost.agent = p;
-
-out:
-	spin_unlock(&e->lock);
-	return ret;
-}
+//static int ghost_prep_agent(struct ghost_enclave *e, struct task_struct *p,
+//			    struct rq *rq, struct ghost_queue *q)
+//{
+//	int ret = 0;
+//
+//	lockdep_assert_held(&rq->lock);
+//	lockdep_assert_held(&p->pi_lock);
+//
+//	WARN_ON_ONCE(!capable(CAP_SYS_NICE));
+//
+//	/*
+//	 * Bail if the task wants to be an agent but there is already
+//	 * an agent associated with this runqueue.
+//	 */
+//	if (rq->ghost.agent != NULL)
+//		return -EBUSY;
+//
+//	/*
+//	 * Clean up old transactions.  Once this cpu has an agent, an old
+//	 * transaction could succeed and turn into a latched task and start
+//	 * running.
+//	 *
+//	 * You may be wondering why we do this here in addition to when the old
+//	 * agent exited.  It's possible for a global agent from an older agent
+//	 * process to write a transaction *after* that cpu's agent task exited.
+//	 */
+//	ghost_claim_and_kill_txn(rq->cpu, GHOST_TXN_NO_AGENT);
+//
+//	/* We hold the rq lock, which is already irqsaved. */
+//	spin_lock(&e->lock);
+//
+//	if (!cpumask_test_cpu(rq->cpu, &e->cpus)) {
+//		ret = -ENODEV;
+//		goto out;
+//	}
+//	if (!q) {
+//		/*
+//		 * Agents typically pass in their own queue, but if not they get
+//		 * the def_q (typically for tests).  But they must have *some*
+//		 * queue.
+//		 */
+//		if (!e->def_q) {
+//			ret = -ENXIO;
+//			goto out;
+//		}
+//		q = e->def_q;
+//	}
+//
+//	ret = __ghost_prep_task(e, p, q, /*forked=*/false, 0);
+//	if (ret)
+//		goto out;
+//
+//	p->ghost.agent = true;
+//	//ghost_sw_set_flag(p->ghost.status_word, GHOST_SW_TASK_IS_AGENT);
+//
+//	/*
+//	 * The agent is not in the ghost class yet, but it will be before the RQ
+//	 * lock is unlocked.
+//	 *
+//	 * We set this now so that if you hold the enclave lock and a cpu
+//	 * belongs to the enclave, then you can *inspect* that cpu's
+//	 * rq->ghost.agent.  Setting or clearing it requires both the enclave
+//	 * lock and the RQ lock.
+//	 */
+//	WARN_ON(rq->ghost.agent || rq->ghost.blocked_in_run);
+//	rq->ghost.agent = p;
+//
+//out:
+//	spin_unlock(&e->lock);
+//	return ret;
+//}
 
 int ghost_sched_fork(struct task_struct *p)
 {
 	struct rq *rq;
 	struct rq_flags rf;
 	int ret;
-	struct ghost_enclave *parent_enclave;
+	//struct ghost_enclave *parent_enclave;
 
 	VM_BUG_ON(!task_has_ghost_policy(p));
 
@@ -2982,9 +2987,10 @@ int ghost_sched_fork(struct task_struct *p)
 		/* It's not quite ECHILD, but it'll tell us where to look. */
 		return -ECHILD;
 	}
-	parent_enclave = current->ghost.enclave;
-	VM_BUG_ON(!parent_enclave);
-	ret = ghost_prep_task(parent_enclave, p, true, current->ghost.agent_type);
+	//parent_enclave = current->ghost.enclave;
+	//VM_BUG_ON(!parent_enclave);
+	//ret = ghost_prep_task(parent_enclave, p, true, current->ghost.agent_type);
+	ret = ghost_prep_task(p, true, current->ghost.agent_type);
 	task_rq_unlock(rq, current, &rf);
 
 	return ret;
@@ -2994,7 +3000,7 @@ void ghost_sched_cleanup_fork(struct task_struct *p)
 {
 	struct ghost_queue *q;
 	//struct ghost_status_word *sw;
-	struct ghost_enclave *e = p->ghost.enclave;
+	//struct ghost_enclave *e = p->ghost.enclave;
 	ulong flags;
 	int error;
 
@@ -3018,10 +3024,10 @@ void ghost_sched_cleanup_fork(struct task_struct *p)
 	//	spin_unlock_irqrestore(&e->lock, flags);
 	//	VM_BUG_ON(error);
 	//}
-	if (e) {
-		kref_put(&e->kref, enclave_release);
-		p->ghost.enclave = NULL;
-	}
+	//if (e) {
+	//	kref_put(&e->kref, enclave_release);
+	//	p->ghost.enclave = NULL;
+	//}
 }
 
 /*
@@ -3052,7 +3058,7 @@ void ghost_sched_cleanup_fork(struct task_struct *p)
  */
 int ghost_setscheduler(struct task_struct *p, struct rq *rq,
 		       const struct sched_attr *attr,
-		       struct ghost_enclave *new_e,
+//		       struct ghost_enclave *new_e,
 		       int *reset_on_fork)
 {
 	int oldpolicy = p->policy;
@@ -3158,39 +3164,39 @@ bool ghost_agent(const struct sched_attr *attr)
 }
 
 /* Makes newq the default for e. */
-static void enclave_set_default_queue(struct ghost_enclave *e,
-				      struct ghost_queue *newq)
-{
-	unsigned long irq_fl;
-
-	/*
-	 * All queues belong to an enclave, and they can only be default for
-	 * their enclave.
-	 */
-	if (WARN_ON(newq->enclave != e))
-		return;
-
-	spin_lock_irqsave(&e->lock, irq_fl);
-	/*
-	 * def_q is a weak (uncounted) reference.  We explicitly clear it in
-	 * queue_release when q no longer tracks this enclave.  It is protected
-	 * by the enclave lock.
-	 */
-	e->def_q = newq;
-	spin_unlock_irqrestore(&e->lock, irq_fl);
-}
+//static void enclave_set_default_queue(struct ghost_enclave *e,
+//				      struct ghost_queue *newq)
+//{
+//	unsigned long irq_fl;
+//
+//	/*
+//	 * All queues belong to an enclave, and they can only be default for
+//	 * their enclave.
+//	 */
+//	if (WARN_ON(newq->enclave != e))
+//		return;
+//
+//	spin_lock_irqsave(&e->lock, irq_fl);
+//	/*
+//	 * def_q is a weak (uncounted) reference.  We explicitly clear it in
+//	 * queue_release when q no longer tracks this enclave.  It is protected
+//	 * by the enclave lock.
+//	 */
+//	e->def_q = newq;
+//	spin_unlock_irqrestore(&e->lock, irq_fl);
+//}
 
 /* Unsets q as default, if it was default. */
-static void enclave_maybe_del_default_queue(struct ghost_enclave *e,
-					    struct ghost_queue *q)
-{
-	unsigned long irq_fl;
-
-	spin_lock_irqsave(&e->lock, irq_fl);
-	if (e->def_q == q)
-		e->def_q = NULL;
-	spin_unlock_irqrestore(&e->lock, irq_fl);
-}
+//static void enclave_maybe_del_default_queue(struct ghost_enclave *e,
+//					    struct ghost_queue *q)
+//{
+//	unsigned long irq_fl;
+//
+//	spin_lock_irqsave(&e->lock, irq_fl);
+//	if (e->def_q == q)
+//		e->def_q = NULL;
+//	spin_unlock_irqrestore(&e->lock, irq_fl);
+//}
 
 static int queue_mmap(struct file *file, struct vm_area_struct *vma)
 {
@@ -3202,11 +3208,11 @@ static int queue_mmap(struct file *file, struct vm_area_struct *vma)
 static int queue_release(struct inode *inode, struct file *file)
 {
 	struct ghost_queue *q = file->private_data;
-	struct ghost_enclave *e = q->enclave;
+	//struct ghost_enclave *e = q->enclave;
 
-	enclave_maybe_del_default_queue(e, q);
+	//enclave_maybe_del_default_queue(e, q);
 	q->enclave = NULL;
-	kref_put(&e->kref, enclave_release);
+	//kref_put(&e->kref, enclave_release);
 	queue_decref(q);		/* drop inode reference */
 	return 0;
 }
@@ -3217,6 +3223,7 @@ static const struct file_operations queue_fops = {
 };
 
 int ghost_create_queue(struct ghost_enclave *e,
+//int ghost_create_queue(
 		       struct ghost_ioc_create_queue __user *arg)
 {
 	ulong size;
@@ -3300,7 +3307,7 @@ int ghost_create_queue(struct ghost_enclave *e,
 	}
 
 	kref_get(&e->kref);
-	q->enclave = e;
+	//q->enclave = e;
 	INIT_WORK(&q->free_work, __queue_free_work);
 
 	return fd;
@@ -3345,24 +3352,24 @@ static struct task_struct *find_task_by_gtid(gtid_t gtid)
 	 * must provide an alternate lookup path so the dying task can be
 	 * scheduled and properly die.
 	 */
-	if (unlikely(!p)) {
-		ulong flags;
-		struct task_struct *t;
-		struct ghost_enclave *e;
+	//if (unlikely(!p)) {
+	//	ulong flags;
+	//	struct task_struct *t;
+	//	//struct ghost_enclave *e;
 
-		e = rcu_dereference(per_cpu(enclave, smp_processor_id()));
-		if (WARN_ON_ONCE(!e))
-			return NULL;
+	//	//e = rcu_dereference(per_cpu(enclave, smp_processor_id()));
+	//	//if (WARN_ON_ONCE(!e))
+	//	//	return NULL;
 
-		spin_lock_irqsave(&e->lock, flags);
-		list_for_each_entry(t, &e->task_list, ghost.task_list) {
-			if (t->gtid == gtid) {
-				p = t;
-				break;
-			}
-		}
-		spin_unlock_irqrestore(&e->lock, flags);
-	}
+	//	//spin_lock_irqsave(&e->lock, flags);
+	//	//list_for_each_entry(t, &e->task_list, ghost.task_list) {
+	//	//	if (t->gtid == gtid) {
+	//	//		p = t;
+	//	//		break;
+	//	//	}
+	//	//}
+	//	//spin_unlock_irqrestore(&e->lock, flags);
+	//}
 	if (!p)
 		return NULL;
 
@@ -3393,123 +3400,123 @@ static struct task_struct *find_task_by_gtid(gtid_t gtid)
 	return p;
 }
 
-static int _get_sw_info(struct ghost_enclave *e,
-			 const struct ghost_status_word *sw,
-			 struct ghost_sw_info *info)
-{
-	ulong flags;
-	int error = -ENOENT;
-	struct ghost_sw_region *region;
-	struct ghost_sw_region_header *header;
-	struct ghost_status_word *first, *limit;
+//static int _get_sw_info(struct ghost_enclave *e,
+//			 const struct ghost_status_word *sw,
+//			 struct ghost_sw_info *info)
+//{
+//	ulong flags;
+//	int error = -ENOENT;
+//	struct ghost_sw_region *region;
+//	struct ghost_sw_region_header *header;
+//	struct ghost_status_word *first, *limit;
+//
+//	spin_lock_irqsave(&e->lock, flags);
+//	list_for_each_entry(region, &e->sw_region_list, list) {
+//		header = region->header;
+//		first = first_status_word(header);
+//		limit = &first[header->capacity];
+//		if (sw >= first && sw < limit) {
+//			info->id = header->id;
+//			info->index = sw - first;
+//			error = 0;	/* success */
+//			break;
+//		}
+//	}
+//	spin_unlock_irqrestore(&e->lock, flags);
+//	return error;
+//}
 
-	spin_lock_irqsave(&e->lock, flags);
-	list_for_each_entry(region, &e->sw_region_list, list) {
-		header = region->header;
-		first = first_status_word(header);
-		limit = &first[header->capacity];
-		if (sw >= first && sw < limit) {
-			info->id = header->id;
-			info->index = sw - first;
-			error = 0;	/* success */
-			break;
-		}
-	}
-	spin_unlock_irqrestore(&e->lock, flags);
-	return error;
-}
+//int ghost_sw_get_info(struct ghost_enclave *e,
+//		      struct ghost_ioc_sw_get_info __user *arg)
+//{
+//	int error = -EINVAL;
+//	struct task_struct *p;
+//	struct ghost_msg_src src;
+//	struct ghost_sw_info info = { 0 };
+//
+//	if (copy_from_user(&src, &arg->request, sizeof(struct ghost_msg_src)))
+//		return -EFAULT;
+//
+//	if (src.type == GHOST_AGENT) {
+//		int want_cpu = src.arg, curr_cpu = get_cpu();
+//		struct rq *rq = this_rq();
+//		struct rq_flags rf;
+//
+//		/*
+//		 * For now we restrict an agent to only query its
+//		 * own status_word.
+//		 */
+//		if (want_cpu != GHOST_THIS_CPU && want_cpu != curr_cpu) {
+//			put_cpu();
+//			error = -ENOENT;
+//			goto done;
+//		}
+//
+//		rq_lock_irq(rq, &rf);
+//		//if (is_agent(rq, current)) {
+//		//	error = _get_sw_info(e, current->ghost.status_word,
+//		//			     &info);
+//		//}
+//		rq_unlock_irq(rq, &rf);
+//		put_cpu();
+//	} else if (src.type == GHOST_TASK) {
+//		rcu_read_lock();
+//		p = find_task_by_gtid(src.arg);
+//		//if (p && p->ghost.status_word)
+//		//	error = _get_sw_info(e, p->ghost.status_word, &info);
+//		//else
+//			error = -ENOENT;
+//		rcu_read_unlock();
+//	}
+//
+//	if (!error) {
+//		if (copy_to_user(&arg->response, &info,
+//				 sizeof(struct ghost_sw_info)))
+//			error = -EFAULT;
+//	}
+//
+//done:
+//	return error;
+//}
 
-int ghost_sw_get_info(struct ghost_enclave *e,
-		      struct ghost_ioc_sw_get_info __user *arg)
-{
-	int error = -EINVAL;
-	struct task_struct *p;
-	struct ghost_msg_src src;
-	struct ghost_sw_info info = { 0 };
-
-	if (copy_from_user(&src, &arg->request, sizeof(struct ghost_msg_src)))
-		return -EFAULT;
-
-	if (src.type == GHOST_AGENT) {
-		int want_cpu = src.arg, curr_cpu = get_cpu();
-		struct rq *rq = this_rq();
-		struct rq_flags rf;
-
-		/*
-		 * For now we restrict an agent to only query its
-		 * own status_word.
-		 */
-		if (want_cpu != GHOST_THIS_CPU && want_cpu != curr_cpu) {
-			put_cpu();
-			error = -ENOENT;
-			goto done;
-		}
-
-		rq_lock_irq(rq, &rf);
-		if (is_agent(rq, current)) {
-			error = _get_sw_info(e, current->ghost.status_word,
-					     &info);
-		}
-		rq_unlock_irq(rq, &rf);
-		put_cpu();
-	} else if (src.type == GHOST_TASK) {
-		rcu_read_lock();
-		p = find_task_by_gtid(src.arg);
-		if (p && p->ghost.status_word)
-			error = _get_sw_info(e, p->ghost.status_word, &info);
-		else
-			error = -ENOENT;
-		rcu_read_unlock();
-	}
-
-	if (!error) {
-		if (copy_to_user(&arg->response, &info,
-				 sizeof(struct ghost_sw_info)))
-			error = -EFAULT;
-	}
-
-done:
-	return error;
-}
-
-int ghost_sw_free(struct ghost_enclave *e, struct ghost_sw_info __user *uinfo)
-{
-	int error;
-	bool gated;
-	gtid_t gtid;
-	ulong flags;
-	struct task_struct *p = NULL;
-	struct ghost_status_word *sw;
-	struct ghost_sw_info info = { 0 };
-
-	if (copy_from_user(&info, uinfo, sizeof(struct ghost_sw_info)))
-		return -EFAULT;
-
-	spin_lock_irqsave(&e->lock, flags);
-
-	sw = lookup_status_word_locked(e, info.id, info.index);
-	if (sw == NULL) {
-		error = -ENOENT;
-		goto done;
-	}
-	if (!status_word_canfree(sw)) {
-		error = -EINVAL;
-		goto done;
-	}
-	gtid = sw->gtid;
-	gated = sw->flags & GHOST_SW_TASK_MSG_GATED;
-	error = free_status_word_locked(e, sw);
-	if (!error && gated) {
-		p = __enclave_remove_inhibited_task(e, gtid);
-		WARN_ON_ONCE(!p);
-	}
-done:
-	spin_unlock_irqrestore(&e->lock, flags);
-	if (p)
-		ghost_uninhibit_task_msgs(p);
-
-	return error;
-}
+//int ghost_sw_free(struct ghost_enclave *e, struct ghost_sw_info __user *uinfo)
+//{
+//	int error;
+//	bool gated;
+//	gtid_t gtid;
+//	ulong flags;
+//	struct task_struct *p = NULL;
+//	struct ghost_status_word *sw;
+//	struct ghost_sw_info info = { 0 };
+//
+//	if (copy_from_user(&info, uinfo, sizeof(struct ghost_sw_info)))
+//		return -EFAULT;
+//
+//	spin_lock_irqsave(&e->lock, flags);
+//
+//	sw = lookup_status_word_locked(e, info.id, info.index);
+//	if (sw == NULL) {
+//		error = -ENOENT;
+//		goto done;
+//	}
+//	if (!status_word_canfree(sw)) {
+//		error = -EINVAL;
+//		goto done;
+//	}
+//	gtid = sw->gtid;
+//	gated = sw->flags & GHOST_SW_TASK_MSG_GATED;
+//	error = free_status_word_locked(e, sw);
+//	if (!error && gated) {
+//		p = __enclave_remove_inhibited_task(e, gtid);
+//		WARN_ON_ONCE(!p);
+//	}
+//done:
+//	spin_unlock_irqrestore(&e->lock, flags);
+//	if (p)
+//		ghost_uninhibit_task_msgs(p);
+//
+//	return error;
+//}
 
 int ghost_associate_queue(struct ghost_ioc_assoc_queue __user *arg)
 {
@@ -3519,7 +3526,7 @@ int ghost_associate_queue(struct ghost_ioc_assoc_queue __user *arg)
 	struct rq_flags rf;
 	struct ghost_msg_src src;
 	struct task_struct *p = NULL;
-	struct ghost_status_word *sw;
+	//struct ghost_status_word *sw;
 	struct ghost_queue *oldq, *newq;
 	int status = 0;
 
@@ -3566,14 +3573,14 @@ int ghost_associate_queue(struct ghost_ioc_assoc_queue __user *arg)
 	rcu_read_unlock();
 
 	oldq = p->ghost.dst_q;
-	sw = p->ghost.status_word;
-	if (unlikely(!sw)) {
-		/* Task is dead or switched to another sched_class */
-		WARN_ON_ONCE(p->state != TASK_DEAD &&
-			     ghost_class(p->sched_class));
-		error = -ENOENT;
-		goto done;
-	}
+	//sw = p->ghost.status_word;
+	//if (unlikely(!sw)) {
+	//	/* Task is dead or switched to another sched_class */
+	//	WARN_ON_ONCE(p->state != TASK_DEAD &&
+	//		     ghost_class(p->sched_class));
+	//	error = -ENOENT;
+	//	goto done;
+	//}
 
 	if (barrier_get(p) != barrier) {
 		error = -ESTALE;
@@ -3631,42 +3638,42 @@ done:
 	return error;
 }
 
-int ghost_set_default_queue(struct ghost_enclave *e,
-			    struct ghost_ioc_set_default_queue __user *arg)
-{
-	int error = 0;
-	struct fd f_que = {0};
-	struct ghost_queue *newq;
-
-	int qfd;
-	struct ghost_ioc_set_default_queue set_queue;
-
-	if (copy_from_user(&set_queue, arg,
-			   sizeof(struct ghost_ioc_set_default_queue)))
-		return -EFAULT;
-
-	qfd = set_queue.fd;
-
-	f_que = fdget(qfd);
-	newq = fd_to_queue(f_que);
-	if (!newq) {
-		error = -EBADF;
-		goto err_newq;
-	}
-	/*
-	 * Make sure that 'newq' belongs to the same enclave as the one
-	 * whose default queue we are updating.
-	 */
-	if (newq->enclave != e) {
-		error = -EINVAL;
-		goto err_newq;
-	}
-	enclave_set_default_queue(e, newq);
-
-err_newq:
-	fdput(f_que);
-	return error;
-}
+//int ghost_set_default_queue(struct ghost_enclave *e,
+//			    struct ghost_ioc_set_default_queue __user *arg)
+//{
+//	int error = 0;
+//	struct fd f_que = {0};
+//	struct ghost_queue *newq;
+//
+//	int qfd;
+//	struct ghost_ioc_set_default_queue set_queue;
+//
+//	if (copy_from_user(&set_queue, arg,
+//			   sizeof(struct ghost_ioc_set_default_queue)))
+//		return -EFAULT;
+//
+//	qfd = set_queue.fd;
+//
+//	f_que = fdget(qfd);
+//	newq = fd_to_queue(f_que);
+//	if (!newq) {
+//		error = -EBADF;
+//		goto err_newq;
+//	}
+//	/*
+//	 * Make sure that 'newq' belongs to the same enclave as the one
+//	 * whose default queue we are updating.
+//	 */
+//	if (newq->enclave != e) {
+//		error = -EINVAL;
+//		goto err_newq;
+//	}
+//	//enclave_set_default_queue(e, newq);
+//
+//err_newq:
+//	fdput(f_que);
+//	return error;
+//}
 
 /*
  * Resolve the target CPU associated with a ghost_queue.
@@ -4092,16 +4099,16 @@ static inline bool cpu_deliver_msg_tick(struct rq *rq, struct task_struct *p)
 {
 	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
 	struct ghost_msg_payload_cpu_tick *payload = &msg->cpu_tick;
-	struct ghost_enclave *e;
+	//struct ghost_enclave *e;
 
 	if (cpu_skip_message(rq))
 		return false;
-	rcu_read_lock();
-	e = rcu_dereference(per_cpu(enclave, cpu_of(rq)));
-	if (!e || ghost_bpf_skip_tick(e, rq)) {
-		rcu_read_unlock();
-		return false;
-	}
+	//rcu_read_lock();
+	//e = rcu_dereference(per_cpu(enclave, cpu_of(rq)));
+	//if (!e || ghost_bpf_skip_tick(e, rq)) {
+	//	rcu_read_unlock();
+	//	return false;
+	//}
 	rcu_read_unlock();
 
 	msg->type = MSG_CPU_TICK;
@@ -4544,7 +4551,7 @@ static void release_from_ghost(struct rq *rq, struct task_struct *p)
 	WARN_ON_ONCE(!p->inhibit_task_msgs && p->state != TASK_DEAD);
 
 	/* status_word is off-limits to the kernel */
-	p->ghost.status_word = NULL;
+	//p->ghost.status_word = NULL;
 
 	if (unlikely(is_agent(rq, p))) {
 		/*
@@ -4587,12 +4594,12 @@ static void release_from_ghost(struct rq *rq, struct task_struct *p)
 		ghost_claim_and_kill_txn(rq->cpu, GHOST_TXN_NO_AGENT);
 
 		/* See ghost_destroy_enclave() */
-		if (rq->ghost.agent_remove_enclave_cpu) {
-			rq->ghost.agent_remove_enclave_cpu = false;
-			spin_lock(&cpu_rsvp);
-			//__enclave_return_cpu(e, rq->cpu);
-			spin_unlock(&cpu_rsvp);
-		}
+		//if (rq->ghost.agent_remove_enclave_cpu) {
+		//	rq->ghost.agent_remove_enclave_cpu = false;
+		//	spin_lock(&cpu_rsvp);
+		//	//__enclave_return_cpu(e, rq->cpu);
+		//	spin_unlock(&cpu_rsvp);
+		//}
 	}
 
 	/*
@@ -4699,8 +4706,7 @@ static void ghost_set_pnt_state(struct rq *rq, struct task_struct *p,
  *
  * Returns 0 on success, -error on failure.
  */
-static int __ghost_wake_agent_on(int cpu, int this_cpu,
-				 bool check_caller_enclave)
+static int __ghost_wake_agent_on(int cpu, int this_cpu)
 {
 	struct rq *dst_rq;
 
@@ -4709,8 +4715,8 @@ static int __ghost_wake_agent_on(int cpu, int this_cpu,
 	if (cpu >= nr_cpu_ids || !cpu_online(cpu))
 		return -ERANGE;
 
-	if (check_caller_enclave && !check_same_enclave(this_cpu, cpu))
-		return -EXDEV;
+	//if (check_caller_enclave && !check_same_enclave(this_cpu, cpu))
+	//	return -EXDEV;
 
 	dst_rq = cpu_rq(cpu);
 
@@ -4765,7 +4771,7 @@ static void ghost_wake_agent_on(int cpu)
 {
 	int this_cpu = get_cpu();
 
-	__ghost_wake_agent_on(cpu, this_cpu, /*check_caller_enclave=*/ false);
+	__ghost_wake_agent_on(cpu, this_cpu);
 	put_cpu();
 }
 
@@ -4774,8 +4780,7 @@ int ghost_wake_agent_on_check(int cpu)
 	int this_cpu = get_cpu();
 	int ret;
 
-	ret = __ghost_wake_agent_on(cpu, this_cpu,
-				    /*check_caller_enclave=*/ true);
+	ret = __ghost_wake_agent_on(cpu, this_cpu);
 	put_cpu();
 	return ret;
 }
@@ -5153,7 +5158,7 @@ done:
 }
 
 static int __ghost_run_gtid_on(gtid_t gtid, u32 task_barrier, int run_flags,
-			       int cpu, bool check_caller_enclave)
+			       int cpu)
 {
 	struct rq_flags rf;
 	struct rq *rq;
@@ -5179,10 +5184,10 @@ static int __ghost_run_gtid_on(gtid_t gtid, u32 task_barrier, int run_flags,
 	if (!run_flags_valid(run_flags, supported_flags, gtid))
 		return -EINVAL;
 
-	if (check_caller_enclave &&
-	    !check_same_enclave(smp_processor_id(), cpu)) {
-		return -EXDEV;
-	}
+	//if (check_caller_enclave &&
+	//    !check_same_enclave(smp_processor_id(), cpu)) {
+	//	return -EXDEV;
+	//}
 
 	rcu_read_lock();
 	next = find_task_by_gtid(gtid);
@@ -5250,8 +5255,7 @@ static int __ghost_run_gtid_on(gtid_t gtid, u32 task_barrier, int run_flags,
  */
 int ghost_run_gtid_on(gtid_t gtid, u32 task_barrier, int run_flags, int cpu)
 {
-	return __ghost_run_gtid_on(gtid, task_barrier, run_flags, cpu,
-				   /*check_caller_enclave=*/ false);
+	return __ghost_run_gtid_on(gtid, task_barrier, run_flags, cpu);
 }
 
 /*
@@ -5263,8 +5267,7 @@ int ghost_run_gtid_on(gtid_t gtid, u32 task_barrier, int run_flags, int cpu)
 int ghost_run_gtid_on_check(gtid_t gtid, u32 task_barrier, int run_flags,
 			    int cpu)
 {
-	return __ghost_run_gtid_on(gtid, task_barrier, run_flags, cpu,
-				   /*check_caller_enclave=*/ true);
+	return __ghost_run_gtid_on(gtid, task_barrier, run_flags, cpu);
 }
 
 static inline bool _ghost_txn_ready(int cpu, int *commit_flags)
@@ -5864,61 +5867,61 @@ extern void ghost_commit_greedy_txn(void)
 	ghost_commit_pending_txn(0);	/* Commit a greedy pending txn */
 }
 
-void ghost_commit_all_greedy_txns(void)
-{
-	int cpu, this_cpu;
-	struct ghost_enclave *e;
-	cpumask_var_t ipimask;
-
-	/*
-	 * 'cpumask_var_t' currently allocates CPU masks on the stack since
-	 * CONFIG_CPUMASK_OFFSTACK is not set. If this flag does become set in
-	 * the future, 'cpumask_var_t' becomes a pointer and
-	 * 'zalloc_cpumask_var' allocates memory rather than act as a no-op. In
-	 * that case, we will likely want to preallocate 'ipimask' for each CPU
-	 * when the transaction region is set up rather than allocate memory on
-	 * every timer tick. This warning will get our attention if the flag is
-	 * set.
-	 */
-#ifdef CONFIG_CPUMASK_OFFSTACK
-	WARN_ONCE(1, "Pre-allocate cpumasks");
-#endif
-
-	if (!zalloc_cpumask_var(&ipimask, GFP_ATOMIC))
-		return;
-
-	this_cpu = get_cpu();
-	rcu_read_lock();
-	e = rcu_dereference(per_cpu(enclave, this_cpu));
-	if (!e)
-		goto done;
-	/*
-	 * Note that e's cpu mask could be changed concurrently, with cpus added
-	 * or removed.  This is benign.  First, any commits will look at the
-	 * rcu-protected ghost_txn pointer.  That's what really matters, and
-	 * any caller to __enclave_unpublish_cpu() will synchronize_rcu().
-	 *
-	 * Furthermore, if a cpu is added while we are looking (which is not
-	 * protected by RCU), it's not a big deal.  This is a greedy commit, and
-	 * we'll catch it on the next tick.
-	 */
-	for_each_cpu(cpu, &e->cpus) {
-		/*
-		 * Send a resched IPI to remote CPUs (and do not commit those
-		 * txns) but commit a txn for this CPU.
-		 */
-		if (cpu == this_cpu)
-			ghost_commit_greedy_txn();
-		else if (ghost_txn_greedy(cpu))
-			__cpumask_set_cpu(cpu, ipimask);
-	}
-	/* Poke the remote CPUs so that they see their pending txns. */
-	ghost_send_reschedule(ipimask);
-done:
-	free_cpumask_var(ipimask);
-	rcu_read_unlock();
-	put_cpu();
-}
+//void ghost_commit_all_greedy_txns(void)
+//{
+//	int cpu, this_cpu;
+//	//struct ghost_enclave *e;
+//	cpumask_var_t ipimask;
+//
+//	/*
+//	 * 'cpumask_var_t' currently allocates CPU masks on the stack since
+//	 * CONFIG_CPUMASK_OFFSTACK is not set. If this flag does become set in
+//	 * the future, 'cpumask_var_t' becomes a pointer and
+//	 * 'zalloc_cpumask_var' allocates memory rather than act as a no-op. In
+//	 * that case, we will likely want to preallocate 'ipimask' for each CPU
+//	 * when the transaction region is set up rather than allocate memory on
+//	 * every timer tick. This warning will get our attention if the flag is
+//	 * set.
+//	 */
+//#ifdef CONFIG_CPUMASK_OFFSTACK
+//	WARN_ONCE(1, "Pre-allocate cpumasks");
+//#endif
+//
+//	if (!zalloc_cpumask_var(&ipimask, GFP_ATOMIC))
+//		return;
+//
+//	this_cpu = get_cpu();
+//	rcu_read_lock();
+//	//e = rcu_dereference(per_cpu(enclave, this_cpu));
+//	//if (!e)
+//	//	goto done;
+//	/*
+//	 * Note that e's cpu mask could be changed concurrently, with cpus added
+//	 * or removed.  This is benign.  First, any commits will look at the
+//	 * rcu-protected ghost_txn pointer.  That's what really matters, and
+//	 * any caller to __enclave_unpublish_cpu() will synchronize_rcu().
+//	 *
+//	 * Furthermore, if a cpu is added while we are looking (which is not
+//	 * protected by RCU), it's not a big deal.  This is a greedy commit, and
+//	 * we'll catch it on the next tick.
+//	 */
+//	//for_each_cpu(cpu, &e->cpus) {
+//	//	/*
+//	//	 * Send a resched IPI to remote CPUs (and do not commit those
+//	//	 * txns) but commit a txn for this CPU.
+//	//	 */
+//	//	if (cpu == this_cpu)
+//	//		ghost_commit_greedy_txn();
+//	//	else if (ghost_txn_greedy(cpu))
+//	//		__cpumask_set_cpu(cpu, ipimask);
+//	//}
+//	/* Poke the remote CPUs so that they see their pending txns. */
+//	ghost_send_reschedule(ipimask);
+//done:
+//	free_cpumask_var(ipimask);
+//	rcu_read_unlock();
+//	put_cpu();
+//}
 
 static void ghost_reached_rendezvous(int cpu, int64_t target)
 {
@@ -5948,7 +5951,8 @@ static inline int64_t ghost_sync_group_cookie(void)
 	return val;
 }
 
-int ghost_sync_group(struct ghost_enclave *e,
+//int ghost_sync_group(struct ghost_enclave *e,
+int ghost_sync_group(
 			  struct ghost_ioc_commit_txn __user *arg)
 {
 	int64_t target;
@@ -6159,7 +6163,8 @@ int ghost_sync_group(struct ghost_enclave *e,
 	return !failed;
 }
 
-int ioctl_ghost_commit_txn(struct ghost_enclave *e,
+//int ioctl_ghost_commit_txn(struct ghost_enclave *e,
+int ioctl_ghost_commit_txn(
 			  struct ghost_ioc_commit_txn __user *arg)
 {
 	int error, state;
@@ -6202,7 +6207,7 @@ int ioctl_ghost_commit_txn(struct ghost_enclave *e,
 
 #ifdef notyet
 	/* Restrict 'cpumask' to the current enclave. */
-	ghost_enclave_cpus_allowed(current, cpus_allowed);
+	//ghost_enclave_cpus_allowed(current, cpus_allowed);
 	cpumask_and(cpumask, cpumask, cpus_allowed);
 #endif
 
