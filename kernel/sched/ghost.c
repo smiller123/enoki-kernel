@@ -226,23 +226,23 @@ EXPORT_SYMBOL(unregister_ghost_agent);
 #define ENCLAVE_IS_DYING	(1U << 0)
 #define ENCLAVE_IS_REAPABLE	(1U << 1)
 
-static inline bool enclave_is_dying(struct ghost_enclave *e)
-{
-	lockdep_assert_held(&e->lock);
-
-	return e->is_dying & ENCLAVE_IS_DYING;
-}
-
-static inline bool enclave_is_reapable(struct ghost_enclave *e)
-{
-	lockdep_assert_held(&e->lock);
-
-	if (e->is_dying & ENCLAVE_IS_REAPABLE) {
-		WARN_ON_ONCE(!enclave_is_dying(e));
-		return true;
-	}
-	return false;
-}
+//static inline bool enclave_is_dying(struct ghost_enclave *e)
+//{
+//	lockdep_assert_held(&e->lock);
+//
+//	return e->is_dying & ENCLAVE_IS_DYING;
+//}
+//
+//static inline bool enclave_is_reapable(struct ghost_enclave *e)
+//{
+//	lockdep_assert_held(&e->lock);
+//
+//	if (e->is_dying & ENCLAVE_IS_REAPABLE) {
+//		WARN_ON_ONCE(!enclave_is_dying(e));
+//		return true;
+//	}
+//	return false;
+//}
 
 /*
  * There are certain things we can't do in the scheduler while holding rq locks
@@ -1937,44 +1937,44 @@ static inline void queue_incref(struct ghost_queue *q)
  * here, even though they were created at runtime.  Once a swr is created, it
  * persists until enclave_release.  This keeps refcounting simpler.
  */
-static void enclave_actual_release(struct work_struct *w)
-{
-	struct ghost_enclave *e = container_of(w, struct ghost_enclave,
-					       enclave_actual_release);
-	struct ghost_sw_region *swr, *temp;
-	int cpu;
-
-	//list_for_each_entry_safe(swr, temp, &e->sw_region_list, list)
-		//__sw_region_free(swr);
-
-	/*
-	 * Any inhibited tasks should have been "released" as a side-effect
-	 * of freeing the status_word regions above.
-	 */
-	WARN_ON_ONCE(!list_empty(&e->inhibited_task_list));
-
-	for_each_possible_cpu(cpu)
-		vfree(e->cpu_data[cpu]);
-
-	kfree(e->cpu_data);
-	kfree(e);
-}
-
-void enclave_release(struct kref *k)
-{
-	struct ghost_enclave *e = container_of(k, struct ghost_enclave, kref);
-
-	VM_BUG_ON(!cpumask_empty(&e->cpus));
-
-	/*
-	 * enclave_release may be called from a non-sleepable context.  However,
-	 * freeing the enclave could block/sleep. vfree -> __vunmap ->
-	 * remove_vm_area.  Solve this by kicking a worker to do the actual
-	 * cleanup.
-	 */
-	if (!schedule_work(&e->enclave_actual_release))
-		WARN_ONCE(1, "enclave released twice?!?");
-}
+//static void enclave_actual_release(struct work_struct *w)
+//{
+//	struct ghost_enclave *e = container_of(w, struct ghost_enclave,
+//					       enclave_actual_release);
+//	struct ghost_sw_region *swr, *temp;
+//	int cpu;
+//
+//	//list_for_each_entry_safe(swr, temp, &e->sw_region_list, list)
+//		//__sw_region_free(swr);
+//
+//	/*
+//	 * Any inhibited tasks should have been "released" as a side-effect
+//	 * of freeing the status_word regions above.
+//	 */
+//	WARN_ON_ONCE(!list_empty(&e->inhibited_task_list));
+//
+//	for_each_possible_cpu(cpu)
+//		vfree(e->cpu_data[cpu]);
+//
+//	kfree(e->cpu_data);
+//	kfree(e);
+//}
+//
+//void enclave_release(struct kref *k)
+//{
+//	struct ghost_enclave *e = container_of(k, struct ghost_enclave, kref);
+//
+//	VM_BUG_ON(!cpumask_empty(&e->cpus));
+//
+//	/*
+//	 * enclave_release may be called from a non-sleepable context.  However,
+//	 * freeing the enclave could block/sleep. vfree -> __vunmap ->
+//	 * remove_vm_area.  Solve this by kicking a worker to do the actual
+//	 * cleanup.
+//	 */
+//	if (!schedule_work(&e->enclave_actual_release))
+//		WARN_ONCE(1, "enclave released twice?!?");
+//}
 
 //static void enclave_reap_tasks(struct work_struct *work)
 //{
@@ -2034,63 +2034,63 @@ void enclave_release(struct kref *k)
 //}
 
 /* Helper work, which we can kick from IRQ context. */
-static void enclave_destroyer(struct work_struct *work)
-{
-	struct ghost_enclave *e = container_of(work, struct ghost_enclave,
-					       enclave_destroyer);
+//static void enclave_destroyer(struct work_struct *work)
+//{
+//	struct ghost_enclave *e = container_of(work, struct ghost_enclave,
+//					       enclave_destroyer);
+//
+//	pr_info("Killing enclave %lu for a violation\n", e->id);
+//	ghost_destroy_enclave(e);
+//	kref_put(&e->kref, enclave_release);
+//}
 
-	pr_info("Killing enclave %lu for a violation\n", e->id);
-	ghost_destroy_enclave(e);
-	kref_put(&e->kref, enclave_release);
-}
-
-struct ghost_enclave *ghost_create_enclave(void)
-{
-	struct ghost_enclave *e = kzalloc(sizeof(*e), GFP_KERNEL);
-	bool vmalloc_failed = false;
-	int cpu;
-
-	BUILD_BUG_ON(sizeof(struct ghost_cpu_data) != PAGE_SIZE);
-
-	if (!e)
-		return NULL;
-	spin_lock_init(&e->lock);
-	kref_init(&e->kref);
-	INIT_LIST_HEAD(&e->sw_region_list);
-	INIT_LIST_HEAD(&e->task_list);
-	INIT_LIST_HEAD(&e->inhibited_task_list);
-	INIT_LIST_HEAD(&e->ew.link);
-	//INIT_WORK(&e->task_reaper, enclave_reap_tasks);
-	INIT_WORK(&e->enclave_actual_release, enclave_actual_release);
-	INIT_WORK(&e->enclave_destroyer, enclave_destroyer);
-
-	e->cpu_data = kcalloc(num_possible_cpus(),
-			      sizeof(struct ghost_cpu_data *), GFP_KERNEL);
-	if (!e->cpu_data) {
-		kfree(e);
-		return NULL;
-	}
-
-	for_each_possible_cpu(cpu) {
-		e->cpu_data[cpu] = vmalloc_user_node_flags(PAGE_SIZE,
-							   cpu_to_node(cpu),
-							   GFP_KERNEL);
-		if (e->cpu_data[cpu] == NULL) {
-			vmalloc_failed = true;
-			break;
-		}
-	}
-
-	if (vmalloc_failed) {
-		for_each_possible_cpu(cpu)
-			vfree(e->cpu_data[cpu]);
-		kfree(e->cpu_data);
-		kfree(e);
-		return NULL;
-	}
-
-	return e;
-}
+//struct ghost_enclave *ghost_create_enclave(void)
+//{
+//	struct ghost_enclave *e = kzalloc(sizeof(*e), GFP_KERNEL);
+//	bool vmalloc_failed = false;
+//	int cpu;
+//
+//	BUILD_BUG_ON(sizeof(struct ghost_cpu_data) != PAGE_SIZE);
+//
+//	if (!e)
+//		return NULL;
+//	spin_lock_init(&e->lock);
+//	kref_init(&e->kref);
+//	INIT_LIST_HEAD(&e->sw_region_list);
+//	INIT_LIST_HEAD(&e->task_list);
+//	INIT_LIST_HEAD(&e->inhibited_task_list);
+//	INIT_LIST_HEAD(&e->ew.link);
+//	//INIT_WORK(&e->task_reaper, enclave_reap_tasks);
+//	//INIT_WORK(&e->enclave_actual_release, enclave_actual_release);
+//	//INIT_WORK(&e->enclave_destroyer, enclave_destroyer);
+//
+//	e->cpu_data = kcalloc(num_possible_cpus(),
+//			      sizeof(struct ghost_cpu_data *), GFP_KERNEL);
+//	if (!e->cpu_data) {
+//		kfree(e);
+//		return NULL;
+//	}
+//
+//	for_each_possible_cpu(cpu) {
+//		e->cpu_data[cpu] = vmalloc_user_node_flags(PAGE_SIZE,
+//							   cpu_to_node(cpu),
+//							   GFP_KERNEL);
+//		if (e->cpu_data[cpu] == NULL) {
+//			vmalloc_failed = true;
+//			break;
+//		}
+//	}
+//
+//	if (vmalloc_failed) {
+//		for_each_possible_cpu(cpu)
+//			vfree(e->cpu_data[cpu]);
+//		kfree(e->cpu_data);
+//		kfree(e);
+//		return NULL;
+//	}
+//
+//	return e;
+//}
 
 /*
  * Here we can trigger any destruction we want, such as killing agents, kicking
@@ -2098,121 +2098,121 @@ struct ghost_enclave *ghost_create_enclave(void)
  *
  * The enclave itself isn't freed until enclave_release().
  */
-void ghost_destroy_enclave(struct ghost_enclave *e)
-{
-	ulong flags;
-	int cpu;
-
-	spin_lock_irqsave(&e->lock, flags);
-	if (enclave_is_dying(e)) {
-		spin_unlock_irqrestore(&e->lock, flags);
-		return;
-	}
-	/* Don't accept new agents into the enclave or changes to its cpuset */
-	e->is_dying = ENCLAVE_IS_DYING;
-
-	/*
-	 * At this point, no one can change the cpus or add new agents, since
-	 * e->is_dying.
-	 *
-	 * Our goal here is to get the agents (if any) off the cpus.  We could
-	 * try kicking them to CFS, and yanking them out of rq->ghost.agent, but
-	 * that is a little tricky.  Are they blocked_in_run?  Are they running
-	 * ghost code that assumes they are the agent?
-	 *
-	 * Another approach is to kill them, then wait for them to finish.  When
-	 * they are done, we can return the cpu to the system.  The trick is
-	 * that we can't wait while holding locks: they could be blocked on I/O.
-	 * They could also be *this* cpu.
-	 *
-	 * To handle this, we defer the cpu removal until the agent exits from
-	 * ghost.  Since our enclave is dying, we can unlock and not worry about
-	 * any agent joining the enclave or the cpus changing.  Since we don't
-	 * give the cpu back to the system right away, we don't have to worry
-	 * about anyone reusing the rq's agent fields.
-	 *
-	 * However, we *do* want to "unpublish" the assignment of the cpu to the
-	 * enclave.  This way, once we synchronize_rcu, no one can be using this
-	 * cpu.  We could defer that until release_from_ghost(), but that is not
-	 * a convenient place to call synchronize_rcu() (holding RQ lock).
-	 *
-	 * In essence, __enclave_remove_cpu() is split: we unpublish the cpu
-	 * here, then return it to the system when the agent leaves ghost.  Note
-	 * the agent could be leaving ghost of its own volition concurrently;
-	 * the enclave lock ensures that if we see an agent, it will remove the
-	 * cpu.  And if not, we fully remove it here.  We make that decision
-	 * before we unlock in the loop below.
-	 *
-	 * Why do we unlock?  Because send_sig grabs the pi_lock, and the lock
-	 * ordering is pi -> rq -> e.  This is safe, since the lock is no longer
-	 * protecting invariants.  The trick is that we rely on is_dying to
-	 * prevent any of the changes to the enclave that we were concerned with
-	 * (agent arrival or cpu changes).  And once we decide that an agent
-	 * should call __enclave_return_cpu(), that decision is set in stone.
-	 */
-
-	for_each_cpu(cpu, &e->cpus) {
-		struct rq *rq = cpu_rq(cpu);
-		struct task_struct *agent;
-
-		//if (!rq->ghost.agent) {
-		//	spin_lock(&cpu_rsvp);
-		//	__enclave_remove_cpu(e, cpu);
-		//	spin_unlock(&cpu_rsvp);
-		//	continue;
-		//}
-		//__enclave_unpublish_cpu(e, cpu);
-		rq->ghost.agent_remove_enclave_cpu = true;
-		/*
-		 * We can't force_sig().  The task might be exiting and losing
-		 * its sighand_struct.  send_sig_info() checks for that.  We
-		 * also can't hold the enclave lock.
-		 *
-		 * As soon as we unlock, the agent could exit on its own too.
-		 * We still need to poke it to make sure it dies, and since it
-		 * might be dying on its own, we need to get a refcount while we
-		 * poke it.
-		 */
-		agent = rq->ghost.agent;
-		get_task_struct(agent);
-		spin_unlock_irqrestore(&e->lock, flags);
-		send_sig_info(SIGKILL, SEND_SIG_PRIV, agent);
-		put_task_struct(agent);
-		spin_lock_irqsave(&e->lock, flags);
-	}
-	spin_unlock_irqrestore(&e->lock, flags);
-
-	synchronize_rcu();	/* Required after unpublishing a cpu */
-
-	/*
-	 * It is safe to reap all tasks in the enclave only _after_
-	 * synchronize_rcu returns: we have unpublished the enclave cpus
-	 * and synchronize_rcu() guarantees that any older rcu read-side
-	 * critical sections in find_task_by_gtid() have completed.
-	 *
-	 * Since 'e->lock' is dropped before synchronize_rcu we must
-	 * prevent enclave_add_task() from sneaking in and scheduling
-	 * the task reaper before synchronize_rcu returns.
-	 *
-	 * This is indicated by or'ing ENCLAVE_IS_REAPABLE into 'e->is_dying'.
-	 */
-	spin_lock_irqsave(&e->lock, flags);
-	e->is_dying |= ENCLAVE_IS_REAPABLE;
-	spin_unlock_irqrestore(&e->lock, flags);
-
-	kref_get(&e->kref);	/* Reaper gets a kref */
-	//if (!schedule_work(&e->task_reaper))
-	//	kref_put(&e->kref, enclave_release);
-
-	/*
-	 * Removes the enclave and all of its files from ghostfs.  There may
-	 * still be open FDs, each of which holds a reference.  When the last FD
-	 * is closed, we'll release and free.
-	 */
-	ghostfs_remove_enclave(e);
-
-	kref_put(&e->kref, enclave_release);
-}
+//void ghost_destroy_enclave(struct ghost_enclave *e)
+//{
+//	ulong flags;
+//	int cpu;
+//
+//	spin_lock_irqsave(&e->lock, flags);
+//	if (enclave_is_dying(e)) {
+//		spin_unlock_irqrestore(&e->lock, flags);
+//		return;
+//	}
+//	/* Don't accept new agents into the enclave or changes to its cpuset */
+//	e->is_dying = ENCLAVE_IS_DYING;
+//
+//	/*
+//	 * At this point, no one can change the cpus or add new agents, since
+//	 * e->is_dying.
+//	 *
+//	 * Our goal here is to get the agents (if any) off the cpus.  We could
+//	 * try kicking them to CFS, and yanking them out of rq->ghost.agent, but
+//	 * that is a little tricky.  Are they blocked_in_run?  Are they running
+//	 * ghost code that assumes they are the agent?
+//	 *
+//	 * Another approach is to kill them, then wait for them to finish.  When
+//	 * they are done, we can return the cpu to the system.  The trick is
+//	 * that we can't wait while holding locks: they could be blocked on I/O.
+//	 * They could also be *this* cpu.
+//	 *
+//	 * To handle this, we defer the cpu removal until the agent exits from
+//	 * ghost.  Since our enclave is dying, we can unlock and not worry about
+//	 * any agent joining the enclave or the cpus changing.  Since we don't
+//	 * give the cpu back to the system right away, we don't have to worry
+//	 * about anyone reusing the rq's agent fields.
+//	 *
+//	 * However, we *do* want to "unpublish" the assignment of the cpu to the
+//	 * enclave.  This way, once we synchronize_rcu, no one can be using this
+//	 * cpu.  We could defer that until release_from_ghost(), but that is not
+//	 * a convenient place to call synchronize_rcu() (holding RQ lock).
+//	 *
+//	 * In essence, __enclave_remove_cpu() is split: we unpublish the cpu
+//	 * here, then return it to the system when the agent leaves ghost.  Note
+//	 * the agent could be leaving ghost of its own volition concurrently;
+//	 * the enclave lock ensures that if we see an agent, it will remove the
+//	 * cpu.  And if not, we fully remove it here.  We make that decision
+//	 * before we unlock in the loop below.
+//	 *
+//	 * Why do we unlock?  Because send_sig grabs the pi_lock, and the lock
+//	 * ordering is pi -> rq -> e.  This is safe, since the lock is no longer
+//	 * protecting invariants.  The trick is that we rely on is_dying to
+//	 * prevent any of the changes to the enclave that we were concerned with
+//	 * (agent arrival or cpu changes).  And once we decide that an agent
+//	 * should call __enclave_return_cpu(), that decision is set in stone.
+//	 */
+//
+//	for_each_cpu(cpu, &e->cpus) {
+//		struct rq *rq = cpu_rq(cpu);
+//		struct task_struct *agent;
+//
+//		//if (!rq->ghost.agent) {
+//		//	spin_lock(&cpu_rsvp);
+//		//	__enclave_remove_cpu(e, cpu);
+//		//	spin_unlock(&cpu_rsvp);
+//		//	continue;
+//		//}
+//		//__enclave_unpublish_cpu(e, cpu);
+//		rq->ghost.agent_remove_enclave_cpu = true;
+//		/*
+//		 * We can't force_sig().  The task might be exiting and losing
+//		 * its sighand_struct.  send_sig_info() checks for that.  We
+//		 * also can't hold the enclave lock.
+//		 *
+//		 * As soon as we unlock, the agent could exit on its own too.
+//		 * We still need to poke it to make sure it dies, and since it
+//		 * might be dying on its own, we need to get a refcount while we
+//		 * poke it.
+//		 */
+//		agent = rq->ghost.agent;
+//		get_task_struct(agent);
+//		spin_unlock_irqrestore(&e->lock, flags);
+//		send_sig_info(SIGKILL, SEND_SIG_PRIV, agent);
+//		put_task_struct(agent);
+//		spin_lock_irqsave(&e->lock, flags);
+//	}
+//	spin_unlock_irqrestore(&e->lock, flags);
+//
+//	synchronize_rcu();	/* Required after unpublishing a cpu */
+//
+//	/*
+//	 * It is safe to reap all tasks in the enclave only _after_
+//	 * synchronize_rcu returns: we have unpublished the enclave cpus
+//	 * and synchronize_rcu() guarantees that any older rcu read-side
+//	 * critical sections in find_task_by_gtid() have completed.
+//	 *
+//	 * Since 'e->lock' is dropped before synchronize_rcu we must
+//	 * prevent enclave_add_task() from sneaking in and scheduling
+//	 * the task reaper before synchronize_rcu returns.
+//	 *
+//	 * This is indicated by or'ing ENCLAVE_IS_REAPABLE into 'e->is_dying'.
+//	 */
+//	spin_lock_irqsave(&e->lock, flags);
+//	e->is_dying |= ENCLAVE_IS_REAPABLE;
+//	spin_unlock_irqrestore(&e->lock, flags);
+//
+//	kref_get(&e->kref);	/* Reaper gets a kref */
+//	//if (!schedule_work(&e->task_reaper))
+//	//	kref_put(&e->kref, enclave_release);
+//
+//	/*
+//	 * Removes the enclave and all of its files from ghostfs.  There may
+//	 * still be open FDs, each of which holds a reference.  When the last FD
+//	 * is closed, we'll release and free.
+//	 */
+//	ghostfs_remove_enclave(e);
+//
+//	kref_put(&e->kref, enclave_release);
+//}
 
 /*
  * Sets the cpus of the enclave to `cpus`, adding and removing as necessary.
@@ -3211,7 +3211,7 @@ static int queue_release(struct inode *inode, struct file *file)
 	//struct ghost_enclave *e = q->enclave;
 
 	//enclave_maybe_del_default_queue(e, q);
-	q->enclave = NULL;
+	//q->enclave = NULL;
 	//kref_put(&e->kref, enclave_release);
 	queue_decref(q);		/* drop inode reference */
 	return 0;
@@ -3222,8 +3222,8 @@ static const struct file_operations queue_fops = {
 	.mmap			= queue_mmap,
 };
 
-int ghost_create_queue(struct ghost_enclave *e,
-//int ghost_create_queue(
+//int ghost_create_queue(struct ghost_enclave *e,
+int ghost_create_queue(
 		       struct ghost_ioc_create_queue __user *arg)
 {
 	ulong size;
@@ -3306,7 +3306,7 @@ int ghost_create_queue(struct ghost_enclave *e,
 		goto err_getfd;
 	}
 
-	kref_get(&e->kref);
+	//kref_get(&e->kref);
 	//q->enclave = e;
 	INIT_WORK(&q->free_work, __queue_free_work);
 
@@ -4607,7 +4607,7 @@ static void release_from_ghost(struct rq *rq, struct task_struct *p)
 	 * rq and e locks.
 	 */
 	//submit_enclave_work(e, rq, false, /*nr_decrefs=*/ 1);
-	p->ghost.enclave = NULL;
+	//p->ghost.enclave = NULL;
 
 	//spin_unlock_irqrestore(&e->lock, flags);
 

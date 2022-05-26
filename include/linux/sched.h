@@ -600,7 +600,7 @@ struct sched_ghost_entity {
 	/* The following fields are protected by 'task_rq(p)->lock' */
 	struct ghost_queue *dst_q;
 	//struct ghost_status_word *status_word;
-	struct ghost_enclave *enclave;
+	//struct ghost_enclave *enclave;
 	struct ghost_agent_type *agent_type;
 
 	/*

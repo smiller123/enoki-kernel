@@ -6196,7 +6196,7 @@ static int __sched_setscheduler(struct task_struct *p,
 	int queue_flags = DEQUEUE_SAVE | DEQUEUE_MOVE | DEQUEUE_NOCLOCK;
 	struct rq *rq;
 #ifdef CONFIG_SCHED_CLASS_GHOST
-	struct ghost_enclave *new_e;
+	//struct ghost_enclave *new_e;
 	struct fd f_enc;
 #endif
 
@@ -6419,13 +6419,13 @@ change:
 	printk(KERN_INFO "setscheduler 8");
 
 #ifdef CONFIG_SCHED_CLASS_GHOST
-	if (ghost_policy(policy)) {
-		//new_e = ghost_fdget_enclave(ghost_schedattr_to_enclave_fd(attr),
-		//			    &f_enc);
-		new_e = NULL;
-	} else {
-		new_e = NULL;
-	}
+	//if (ghost_policy(policy)) {
+	//	//new_e = ghost_fdget_enclave(ghost_schedattr_to_enclave_fd(attr),
+	//	//			    &f_enc);
+	//	new_e = NULL;
+	//} else {
+	//	new_e = NULL;
+	//}
 	if (ghost_policy(policy) || ghost_policy(p->policy)) {
 		printk(KERN_INFO "setting ghost scheduler");
 		int error = ghost_setscheduler(p, rq, attr,

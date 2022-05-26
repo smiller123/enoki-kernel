@@ -227,24 +227,24 @@ extern void ghostfs_remove_enclave(struct ghost_enclave *e);
 /* In kernel/sched/ghost.c */
 extern bool ghost_produce_prev_msgs(struct rq *rq, struct task_struct *prev);
 extern struct ghost_enclave *ghost_create_enclave(void);
-extern void enclave_release(struct kref *k);
-extern void ghost_destroy_enclave(struct ghost_enclave *e);
+//extern void enclave_release(struct kref *k);
+//extern void ghost_destroy_enclave(struct ghost_enclave *e);
 //extern int ghost_enclave_set_cpus(struct ghost_enclave *e,
 //				  const struct cpumask *cpus);
 extern int ghost_region_mmap(struct file *file, struct vm_area_struct *vma,
 			     void *addr, ulong mapsize);
 extern int ghost_cpu_data_mmap(struct file *file, struct vm_area_struct *vma,
 			       struct ghost_cpu_data **cpu_data, ulong mapsize);
-extern struct ghost_sw_region *ghost_create_sw_region(struct ghost_enclave *e,
-						      unsigned int id,
-						      unsigned int node);
-extern int ghost_sw_get_info(struct ghost_enclave *e,
-			     struct ghost_ioc_sw_get_info __user *arg);
-extern int ghost_sw_free(struct ghost_enclave *e,
-			 struct ghost_sw_info __user *uinfo);
-extern int ghost_create_queue(struct ghost_enclave *e,
-			      struct ghost_ioc_create_queue __user *arg);
-extern int ghost_associate_queue(struct ghost_ioc_assoc_queue __user *arg);
+//extern struct ghost_sw_region *ghost_create_sw_region(struct ghost_enclave *e,
+//						      unsigned int id,
+//						      unsigned int node);
+//extern int ghost_sw_get_info(struct ghost_enclave *e,
+//			     struct ghost_ioc_sw_get_info __user *arg);
+//extern int ghost_sw_free(struct ghost_enclave *e,
+//			 struct ghost_sw_info __user *uinfo);
+//extern int ghost_create_queue(struct ghost_enclave *e,
+//			      struct ghost_ioc_create_queue __user *arg);
+//extern int ghost_associate_queue(struct ghost_ioc_assoc_queue __user *arg);
 extern int ghost_set_default_queue(
 			struct ghost_ioc_set_default_queue __user *arg);
 extern int ghost_config_queue_wakeup(
@@ -255,8 +255,8 @@ extern int ioctl_ghost_commit_txn(
 extern int ghost_sync_group(
 			    struct ghost_ioc_commit_txn __user *arg);
 extern int ghost_timerfd_settime(struct ghost_ioc_timerfd_settime __user *arg);
-extern struct ghost_enclave *ghost_fdget_enclave(int fd, struct fd *fd_to_put);
-extern void ghost_fdput_enclave(struct ghost_enclave *e, struct fd *fd_to_put);
+//extern struct ghost_enclave *ghost_fdget_enclave(int fd, struct fd *fd_to_put);
+//extern void ghost_fdput_enclave(struct ghost_enclave *e, struct fd *fd_to_put);
 
 extern void init_sched_ghost_class(void);
 extern void init_ghost_rq(struct ghost_rq *ghost_rq);
@@ -283,25 +283,25 @@ extern void ghost_cpu_idle(void);
 
 struct rq_flags;
 #ifdef CONFIG_BPF
-extern bool ghost_bpf_skip_tick(struct ghost_enclave *e, struct rq *rq);
-extern void ghost_bpf_pnt(struct ghost_enclave *e, struct rq *rq,
-			  struct rq_flags *rf);
-extern bool ghost_bpf_msg_send(struct ghost_enclave *e,
-			       struct bpf_ghost_msg *msg);
+//extern bool ghost_bpf_skip_tick(struct ghost_enclave *e, struct rq *rq);
+//extern void ghost_bpf_pnt(struct ghost_enclave *e, struct rq *rq,
+//			  struct rq_flags *rf);
+//extern bool ghost_bpf_msg_send(struct ghost_enclave *e,
+//			       struct bpf_ghost_msg *msg);
 #else
-static inline bool ghost_bpf_skip_tick(struct ghost_enclave *e, struct rq *rq)
-{
-	return false;
-}
-static inline void ghost_bpf_pnt(struct ghost_enclave *e, struct rq *rq,
-				 struct rq_flags *rf)
-{
-}
-static inline bool ghost_bpf_msg_send(struct ghost_enclave *e,
-				      struct bpf_ghost_msg *msg)
-{
-	return true;
-}
+//static inline bool ghost_bpf_skip_tick(struct ghost_enclave *e, struct rq *rq)
+//{
+//	return false;
+//}
+//static inline void ghost_bpf_pnt(struct ghost_enclave *e, struct rq *rq,
+//				 struct rq_flags *rf)
+//{
+//}
+//static inline bool ghost_bpf_msg_send(struct ghost_enclave *e,
+//				      struct bpf_ghost_msg *msg)
+//{
+//	return true;
+//}
 #endif
 
 extern void ghost_wait_for_rendezvous(struct rq *rq);

@@ -48,17 +48,17 @@ struct gf_dirent {
  * Finds a specific file in a directory table.  This is useful for runtime
  * initialization, though keep in mind the dirtab is a global structure.
  */
-static struct gf_dirent *gf_find_file(struct gf_dirent *dirtab,
-				      const char *name)
-{
-	struct gf_dirent *gft;
-
-	for (gft = dirtab; gft->name; gft++) {
-		if (!strcmp(gft->name, name))
-			return gft;
-	}
-	return NULL;
-}
+//static struct gf_dirent *gf_find_file(struct gf_dirent *dirtab,
+//				      const char *name)
+//{
+//	struct gf_dirent *gft;
+//
+//	for (gft = dirtab; gft->name; gft++) {
+//		if (!strcmp(gft->name, name))
+//			return gft;
+//	}
+//	return NULL;
+//}
 
 /*
  * Every open file in an enclave holds a kref on the enclave.  This includes the
@@ -84,34 +84,34 @@ static struct gf_dirent *gf_find_file(struct gf_dirent *dirtab,
  * moment if it determines an enclave misbehaved.
  */
 
-static struct ghost_enclave *of_to_e(struct kernfs_open_file *of)
-{
-	return of->kn->priv;
-}
-
-static struct ghost_enclave *seq_to_e(struct seq_file *sf)
-{
-	struct kernfs_open_file *of = sf->private;
-
-	return of_to_e(of);
-}
-
-/* For enclave files whose priv directly points to a ghost enclave. */
-static int gf_e_open(struct kernfs_open_file *of)
-{
-	struct ghost_enclave *e = of_to_e(of);
-
-	kref_get(&e->kref);
-	return 0;
-}
+//static struct ghost_enclave *of_to_e(struct kernfs_open_file *of)
+//{
+//	return of->kn->priv;
+//}
+//
+//static struct ghost_enclave *seq_to_e(struct seq_file *sf)
+//{
+//	struct kernfs_open_file *of = sf->private;
+//
+//	return of_to_e(of);
+//}
 
 /* For enclave files whose priv directly points to a ghost enclave. */
-static void gf_e_release(struct kernfs_open_file *of)
-{
-	struct ghost_enclave *e = of_to_e(of);
-
-	kref_put(&e->kref, enclave_release);
-}
+//static int gf_e_open(struct kernfs_open_file *of)
+//{
+//	struct ghost_enclave *e = of_to_e(of);
+//
+//	kref_get(&e->kref);
+//	return 0;
+//}
+//
+///* For enclave files whose priv directly points to a ghost enclave. */
+//static void gf_e_release(struct kernfs_open_file *of)
+//{
+//	struct ghost_enclave *e = of_to_e(of);
+//
+//	//kref_put(&e->kref, enclave_release);
+//}
 
 /*
  * There can be at most one writable open, and there can be any number of
@@ -121,250 +121,251 @@ static void gf_e_release(struct kernfs_open_file *of)
  * as having an agent_online, and the value of agent_online will change
  * accordingly.
  */
-static int gf_agent_online_open(struct kernfs_open_file *of)
-{
-	struct ghost_enclave *e = of_to_e(of);
-	unsigned long irq_fl;
+//static int gf_agent_online_open(struct kernfs_open_file *of)
+//{
+//	struct ghost_enclave *e = of_to_e(of);
+//	unsigned long irq_fl;
+//
+//	if (!(of->file->f_mode & FMODE_WRITE))
+//		goto done;
+//
+//	spin_lock_irqsave(&e->lock, irq_fl);
+//	if (e->agent_online) {
+//		spin_unlock_irqrestore(&e->lock, irq_fl);
+//		return -EBUSY;
+//	}
+//	e->agent_online = true;
+//	spin_unlock_irqrestore(&e->lock, irq_fl);
+//
+//	kernfs_notify(of->kn);
+//
+//done:
+//	kref_get(&e->kref);
+//	return 0;
+//}
+//
+//static void gf_agent_online_release(struct kernfs_open_file *of)
+//{
+//	struct ghost_enclave *e = of_to_e(of);
+//	unsigned long irq_fl;
+//
+//	if (!(of->file->f_mode & FMODE_WRITE))
+//		return;
+//		//goto done;
+//
+//	spin_lock_irqsave(&e->lock, irq_fl);
+//	WARN_ONCE(!e->agent_online,
+//		  "closing RW agent_online for enclave_%lu, but it's not online!",
+//		  e->id);
+//	e->agent_online = false;
+//	spin_unlock_irqrestore(&e->lock, irq_fl);
+//
+//	/*
+//	 * Kicks any epoll/notifiers about the change in state.  This is the
+//	 * "agent death edge".
+//	 *
+//	 * Note that this doesn't necessarily mean the enclave will be
+//	 * destroyed, merely that userspace no longer thinks there is a valid
+//	 * agent.  This FD was probably closed because the agent crashed.
+//	 */
+//	kernfs_notify(of->kn);
+//
+////done:
+//	//kref_put(&e->kref, enclave_release);
+//}
 
-	if (!(of->file->f_mode & FMODE_WRITE))
-		goto done;
+//static int gf_agent_online_show(struct seq_file *sf, void *v)
+//{
+//	struct ghost_enclave *e = seq_to_e(sf);
+//
+//	seq_printf(sf, "%u", e->agent_online ? 1 : 0);
+//	return 0;
+//}
+//
+//static ssize_t gf_agent_online_write(struct kernfs_open_file *of, char *buf,
+//				     size_t bytes, loff_t off)
+//{
+//	/* We need a write op so kernfs allows us to be opened for writing. */
+//	return -EINVAL;
+//}
+//
+//static struct kernfs_ops gf_ops_e_agent_online = {
+//	.open			= gf_agent_online_open,
+//	.release		= gf_agent_online_release,
+//	.seq_show		= gf_agent_online_show,
+//	.write			= gf_agent_online_write,
+//};
+//
+//static int gf_cpu_data_mmap(struct kernfs_open_file *of,
+//			       struct vm_area_struct *vma)
+//{
+//	struct ghost_enclave *e = of_to_e(of);
+//
+//	return ghost_cpu_data_mmap(of->file, vma, e->cpu_data,
+//				   of->kn->attr.size);
+//}
 
-	spin_lock_irqsave(&e->lock, irq_fl);
-	if (e->agent_online) {
-		spin_unlock_irqrestore(&e->lock, irq_fl);
-		return -EBUSY;
-	}
-	e->agent_online = true;
-	spin_unlock_irqrestore(&e->lock, irq_fl);
+//static struct kernfs_ops gf_ops_e_cpu_data = {
+//	.open			= gf_e_open,
+//	.release		= gf_e_release,
+//	.mmap			= gf_cpu_data_mmap,
+//};
 
-	kernfs_notify(of->kn);
+///* Returns an ASCII list of the cpus in the enclave */
+//static ssize_t gf_cpulist_read(struct kernfs_open_file *of, char *buf,
+//			       size_t bytes, loff_t off)
+//{
+//	struct ghost_enclave *e = of_to_e(of);
+//	unsigned long fl;
+//	cpumask_var_t cpus;
+//	char *pagebuf;
+//	ssize_t strlen;
+//
+//	if (off > PAGE_SIZE)
+//		return -EINVAL;
+//	bytes = min_t(size_t, bytes, PAGE_SIZE - off);
+//
+//	if (!alloc_cpumask_var(&cpus, GFP_KERNEL))
+//		return -ENOMEM;
+//
+//	spin_lock_irqsave(&e->lock, fl);
+//	memcpy(cpus, &e->cpus, cpumask_size());
+//	spin_unlock_irqrestore(&e->lock, fl);
+//
+//	pagebuf = (char *)get_zeroed_page(GFP_KERNEL);
+//	if (!pagebuf) {
+//		free_cpumask_var(cpus);
+//		return -ENOMEM;
+//	}
+//
+//	strlen = cpumap_print_to_pagebuf(/*list=*/true, pagebuf, cpus);
+//	bytes = memory_read_from_buffer(buf, bytes, &off, pagebuf, strlen);
+//
+//	free_page((unsigned long)pagebuf);
+//	free_cpumask_var(cpus);
+//
+//	return bytes;
+//}
+//
+//
+//static ssize_t __cpu_set_write(struct kernfs_open_file *of, char *buf,
+//			       size_t bytes, loff_t off, bool is_list)
+//{
+//	cpumask_var_t cpus;
+//	int err;
+//
+//	if (!alloc_cpumask_var(&cpus, GFP_KERNEL))
+//		return -ENOMEM;
+//	if (is_list)
+//		err = cpulist_parse(buf, cpus);
+//	else
+//		err = cpumask_parse(buf, cpus);
+//	if (err) {
+//		free_cpumask_var(cpus);
+//		return err;
+//	}
+//	//err = ghost_enclave_set_cpus(of_to_e(of), cpus);
+//	free_cpumask_var(cpus);
+//	return err ? err : bytes;
+//}
+//
+///* Sets the enclave's cpus to buf, an ASCII list of cpus. */
+//static ssize_t gf_cpulist_write(struct kernfs_open_file *of, char *buf,
+//				size_t bytes, loff_t off)
+//{
+//	return __cpu_set_write(of, buf, bytes, off, /*is_list=*/true);
+//}
 
-done:
-	kref_get(&e->kref);
-	return 0;
-}
-
-static void gf_agent_online_release(struct kernfs_open_file *of)
-{
-	struct ghost_enclave *e = of_to_e(of);
-	unsigned long irq_fl;
-
-	if (!(of->file->f_mode & FMODE_WRITE))
-		goto done;
-
-	spin_lock_irqsave(&e->lock, irq_fl);
-	WARN_ONCE(!e->agent_online,
-		  "closing RW agent_online for enclave_%lu, but it's not online!",
-		  e->id);
-	e->agent_online = false;
-	spin_unlock_irqrestore(&e->lock, irq_fl);
-
-	/*
-	 * Kicks any epoll/notifiers about the change in state.  This is the
-	 * "agent death edge".
-	 *
-	 * Note that this doesn't necessarily mean the enclave will be
-	 * destroyed, merely that userspace no longer thinks there is a valid
-	 * agent.  This FD was probably closed because the agent crashed.
-	 */
-	kernfs_notify(of->kn);
-
-done:
-	kref_put(&e->kref, enclave_release);
-}
-
-static int gf_agent_online_show(struct seq_file *sf, void *v)
-{
-	struct ghost_enclave *e = seq_to_e(sf);
-
-	seq_printf(sf, "%u", e->agent_online ? 1 : 0);
-	return 0;
-}
-
-static ssize_t gf_agent_online_write(struct kernfs_open_file *of, char *buf,
-				     size_t bytes, loff_t off)
-{
-	/* We need a write op so kernfs allows us to be opened for writing. */
-	return -EINVAL;
-}
-
-static struct kernfs_ops gf_ops_e_agent_online = {
-	.open			= gf_agent_online_open,
-	.release		= gf_agent_online_release,
-	.seq_show		= gf_agent_online_show,
-	.write			= gf_agent_online_write,
-};
-
-static int gf_cpu_data_mmap(struct kernfs_open_file *of,
-			       struct vm_area_struct *vma)
-{
-	struct ghost_enclave *e = of_to_e(of);
-
-	return ghost_cpu_data_mmap(of->file, vma, e->cpu_data,
-				   of->kn->attr.size);
-}
-
-static struct kernfs_ops gf_ops_e_cpu_data = {
-	.open			= gf_e_open,
-	.release		= gf_e_release,
-	.mmap			= gf_cpu_data_mmap,
-};
-
-/* Returns an ASCII list of the cpus in the enclave */
-static ssize_t gf_cpulist_read(struct kernfs_open_file *of, char *buf,
-			       size_t bytes, loff_t off)
-{
-	struct ghost_enclave *e = of_to_e(of);
-	unsigned long fl;
-	cpumask_var_t cpus;
-	char *pagebuf;
-	ssize_t strlen;
-
-	if (off > PAGE_SIZE)
-		return -EINVAL;
-	bytes = min_t(size_t, bytes, PAGE_SIZE - off);
-
-	if (!alloc_cpumask_var(&cpus, GFP_KERNEL))
-		return -ENOMEM;
-
-	spin_lock_irqsave(&e->lock, fl);
-	memcpy(cpus, &e->cpus, cpumask_size());
-	spin_unlock_irqrestore(&e->lock, fl);
-
-	pagebuf = (char *)get_zeroed_page(GFP_KERNEL);
-	if (!pagebuf) {
-		free_cpumask_var(cpus);
-		return -ENOMEM;
-	}
-
-	strlen = cpumap_print_to_pagebuf(/*list=*/true, pagebuf, cpus);
-	bytes = memory_read_from_buffer(buf, bytes, &off, pagebuf, strlen);
-
-	free_page((unsigned long)pagebuf);
-	free_cpumask_var(cpus);
-
-	return bytes;
-}
-
-
-static ssize_t __cpu_set_write(struct kernfs_open_file *of, char *buf,
-			       size_t bytes, loff_t off, bool is_list)
-{
-	cpumask_var_t cpus;
-	int err;
-
-	if (!alloc_cpumask_var(&cpus, GFP_KERNEL))
-		return -ENOMEM;
-	if (is_list)
-		err = cpulist_parse(buf, cpus);
-	else
-		err = cpumask_parse(buf, cpus);
-	if (err) {
-		free_cpumask_var(cpus);
-		return err;
-	}
-	//err = ghost_enclave_set_cpus(of_to_e(of), cpus);
-	free_cpumask_var(cpus);
-	return err ? err : bytes;
-}
-
-/* Sets the enclave's cpus to buf, an ASCII list of cpus. */
-static ssize_t gf_cpulist_write(struct kernfs_open_file *of, char *buf,
-				size_t bytes, loff_t off)
-{
-	return __cpu_set_write(of, buf, bytes, off, /*is_list=*/true);
-}
-
-static struct kernfs_ops gf_ops_e_cpulist = {
-	.open			= gf_e_open,
-	.release		= gf_e_release,
-	.read			= gf_cpulist_read,
-	.write			= gf_cpulist_write,
-};
+//static struct kernfs_ops gf_ops_e_cpulist = {
+//	.open			= gf_e_open,
+//	.release		= gf_e_release,
+//	.read			= gf_cpulist_read,
+//	.write			= gf_cpulist_write,
+//};
 
 /* Returns an ASCII hex mask of the cpus in the enclave */
-static ssize_t gf_cpumask_read(struct kernfs_open_file *of, char *buf,
-			       size_t bytes, loff_t off)
-{
-	struct ghost_enclave *e = of_to_e(of);
-	unsigned long fl;
-	cpumask_var_t cpus;
-	char *mask_str;
-	int len;
-
-	if (!alloc_cpumask_var(&cpus, GFP_KERNEL))
-		return -ENOMEM;
-
-	spin_lock_irqsave(&e->lock, fl);
-	memcpy(cpus, &e->cpus, cpumask_size());
-	spin_unlock_irqrestore(&e->lock, fl);
-
-	/*
-	 * +1 for the \0.  We won't return the \0 to userspace, but the string
-	 * will be null-terminated while in the kernel.
-	 */
-	len = snprintf(NULL, 0, "%*pb\n", cpumask_pr_args(cpus)) + 1;
-	mask_str = kmalloc(len, GFP_KERNEL);
-	if (!mask_str) {
-		free_cpumask_var(cpus);
-		return -ENOMEM;
-	}
-	len = snprintf(mask_str, len, "%*pb\n", cpumask_pr_args(cpus));
-	bytes = memory_read_from_buffer(buf, bytes, &off, mask_str, len);
-
-	kfree(mask_str);
-	free_cpumask_var(cpus);
-
-	return bytes;
-}
+//static ssize_t gf_cpumask_read(struct kernfs_open_file *of, char *buf,
+//			       size_t bytes, loff_t off)
+//{
+//	struct ghost_enclave *e = of_to_e(of);
+//	unsigned long fl;
+//	cpumask_var_t cpus;
+//	char *mask_str;
+//	int len;
+//
+//	if (!alloc_cpumask_var(&cpus, GFP_KERNEL))
+//		return -ENOMEM;
+//
+//	spin_lock_irqsave(&e->lock, fl);
+//	memcpy(cpus, &e->cpus, cpumask_size());
+//	spin_unlock_irqrestore(&e->lock, fl);
+//
+//	/*
+//	 * +1 for the \0.  We won't return the \0 to userspace, but the string
+//	 * will be null-terminated while in the kernel.
+//	 */
+//	len = snprintf(NULL, 0, "%*pb\n", cpumask_pr_args(cpus)) + 1;
+//	mask_str = kmalloc(len, GFP_KERNEL);
+//	if (!mask_str) {
+//		free_cpumask_var(cpus);
+//		return -ENOMEM;
+//	}
+//	len = snprintf(mask_str, len, "%*pb\n", cpumask_pr_args(cpus));
+//	bytes = memory_read_from_buffer(buf, bytes, &off, mask_str, len);
+//
+//	kfree(mask_str);
+//	free_cpumask_var(cpus);
+//
+//	return bytes;
+//}
 
 /* Sets the enclave's cpus to buf, an ASCII hex cpumask. */
-static ssize_t gf_cpumask_write(struct kernfs_open_file *of, char *buf,
-				size_t bytes, loff_t off)
-{
-	return __cpu_set_write(of, buf, bytes, off, /*is_list=*/false);
-}
+//static ssize_t gf_cpumask_write(struct kernfs_open_file *of, char *buf,
+//				size_t bytes, loff_t off)
+//{
+//	return __cpu_set_write(of, buf, bytes, off, /*is_list=*/false);
+//}
 
-static struct kernfs_ops gf_ops_e_cpumask = {
-	.open			= gf_e_open,
-	.release		= gf_e_release,
-	.read			= gf_cpumask_read,
-	.write			= gf_cpumask_write,
-};
-
-static int gf_ctl_show(struct seq_file *sf, void *v)
-{
-	struct ghost_enclave *e = seq_to_e(sf);
-
-	seq_printf(sf, "%lu", e->id);
-	return 0;
-}
+//static struct kernfs_ops gf_ops_e_cpumask = {
+//	.open			= gf_e_open,
+//	.release		= gf_e_release,
+//	.read			= gf_cpumask_read,
+//	.write			= gf_cpumask_write,
+//};
+//
+//static int gf_ctl_show(struct seq_file *sf, void *v)
+//{
+//	struct ghost_enclave *e = seq_to_e(sf);
+//
+//	seq_printf(sf, "%lu", e->id);
+//	return 0;
+//}
 
 /* Called from the scheduler when it destroys the enclave. */
-void ghostfs_remove_enclave(struct ghost_enclave *e)
-{
-	kernfs_remove(e->enclave_dir);
-}
+//void ghostfs_remove_enclave(struct ghost_enclave *e)
+//{
+//	kernfs_remove(e->enclave_dir);
+//}
 
-static void destroy_enclave(struct kernfs_open_file *ctl_of)
-{
-	struct kernfs_node *ctl = ctl_of->kn;
-	struct ghost_enclave *e = of_to_e(ctl_of);
-
-	/*
-	 * kernfs_remove() works recursively, removing the entire enclave
-	 * directory.  We need to remove the ctl file first, since we're in the
-	 * middle of a kn op.
-	 *
-	 * Multiple threads can call kernfs_remove_self() at once.  Whichever
-	 * succeeds will remove the directory and release e.
-	 */
-	if (!kernfs_remove_self(ctl))
-		return;
-	if (WARN_ON(ctl->parent != e->enclave_dir))
-		return;
-	ghost_destroy_enclave(e);
-}
+//static void destroy_enclave(struct kernfs_open_file *ctl_of)
+//{
+//	struct kernfs_node *ctl = ctl_of->kn;
+//	struct ghost_enclave *e = of_to_e(ctl_of);
+//
+//	/*
+//	 * kernfs_remove() works recursively, removing the entire enclave
+//	 * directory.  We need to remove the ctl file first, since we're in the
+//	 * middle of a kn op.
+//	 *
+//	 * Multiple threads can call kernfs_remove_self() at once.  Whichever
+//	 * succeeds will remove the directory and release e.
+//	 */
+//	if (!kernfs_remove_self(ctl))
+//		return;
+//	if (WARN_ON(ctl->parent != e->enclave_dir))
+//		return;
+//	//ghost_destroy_enclave(e);
+//}
 
 //static struct ghost_sw_region *of_to_swr(struct kernfs_open_file *of)
 //{
@@ -466,74 +467,74 @@ static ssize_t gf_ctl_write(struct kernfs_open_file *of, char *buf,
 
 	strip_slash_n(buf, len);
 
-	if (!strcmp(buf, "destroy")) {
-		destroy_enclave(of);
+	//if (!strcmp(buf, "destroy")) {
+	//	destroy_enclave(of);
 	//} else if (sscanf(buf, "create sw_region %u %u", &arg1, &arg2) == 2) {
 	//	err = create_sw_region(of, arg1, arg2);
 	//	if (err)
 	//		return err;
-	} else {
-		pr_err("%s: bad cmd :%s:", __func__, buf);
-		return -EINVAL;
-	}
+	//} else {
+	//	pr_err("%s: bad cmd :%s:", __func__, buf);
+	//	return -EINVAL;
+	//}
 
 	return len;
 }
 
-static long gf_ctl_ioctl(struct kernfs_open_file *of, unsigned int cmd,
-			 unsigned long arg)
-{
-	struct ghost_enclave *e = of_to_e(of);
+//static long gf_ctl_ioctl(struct kernfs_open_file *of, unsigned int cmd,
+//			 unsigned long arg)
+//{
+//	struct ghost_enclave *e = of_to_e(of);
+//
+//	if (!(of->file->f_mode & FMODE_WRITE))
+//		return -EACCES;
+//	switch (cmd) {
+//	case GHOST_IOC_NULL:
+//		return 0;
+//	case GHOST_IOC_SW_GET_INFO:
+//		return 0;
+//		//return ghost_sw_get_info(e,
+//		//		(struct ghost_ioc_sw_get_info __user *)arg);
+//	case GHOST_IOC_SW_FREE:
+//		return 0;
+//		//return ghost_sw_free(e, (void __user *)arg);
+//	case GHOST_IOC_CREATE_QUEUE:
+//		//return 0;
+//		return ghost_create_queue(e,
+//				(struct ghost_ioc_create_queue __user *)arg);
+//	case GHOST_IOC_ASSOC_QUEUE:
+//		return ghost_associate_queue(
+//				(struct ghost_ioc_assoc_queue __user *)arg);
+//	case GHOST_IOC_SET_DEFAULT_QUEUE:
+//		return 0;
+//		//return ghost_set_default_queue(e,
+//		//	(struct ghost_ioc_set_default_queue __user *)arg);
+//	case GHOST_IOC_CONFIG_QUEUE_WAKEUP:
+//		return ghost_config_queue_wakeup(
+//			(struct ghost_ioc_config_queue_wakeup __user *)arg);
+//	case GHOST_IOC_GET_CPU_TIME:
+//		return ghost_get_cpu_time(
+//				(struct ghost_ioc_get_cpu_time __user *)arg);
+//	case GHOST_IOC_COMMIT_TXN:
+//		return ioctl_ghost_commit_txn(
+//				(struct ghost_ioc_commit_txn __user *)arg);
+//	case GHOST_IOC_SYNC_GROUP_TXN:
+//		return ghost_sync_group(
+//				(struct ghost_ioc_commit_txn __user *)arg);
+//	case GHOST_IOC_TIMERFD_SETTIME:
+//		return ghost_timerfd_settime(
+//				(struct ghost_ioc_timerfd_settime __user *)arg);
+//	}
+//	return -ENOIOCTLCMD;
+//}
 
-	if (!(of->file->f_mode & FMODE_WRITE))
-		return -EACCES;
-	switch (cmd) {
-	case GHOST_IOC_NULL:
-		return 0;
-	case GHOST_IOC_SW_GET_INFO:
-		return 0;
-		//return ghost_sw_get_info(e,
-		//		(struct ghost_ioc_sw_get_info __user *)arg);
-	case GHOST_IOC_SW_FREE:
-		return 0;
-		//return ghost_sw_free(e, (void __user *)arg);
-	case GHOST_IOC_CREATE_QUEUE:
-		//return 0;
-		return ghost_create_queue(e,
-				(struct ghost_ioc_create_queue __user *)arg);
-	case GHOST_IOC_ASSOC_QUEUE:
-		return ghost_associate_queue(
-				(struct ghost_ioc_assoc_queue __user *)arg);
-	case GHOST_IOC_SET_DEFAULT_QUEUE:
-		return 0;
-		//return ghost_set_default_queue(e,
-		//	(struct ghost_ioc_set_default_queue __user *)arg);
-	case GHOST_IOC_CONFIG_QUEUE_WAKEUP:
-		return ghost_config_queue_wakeup(
-			(struct ghost_ioc_config_queue_wakeup __user *)arg);
-	case GHOST_IOC_GET_CPU_TIME:
-		return ghost_get_cpu_time(
-				(struct ghost_ioc_get_cpu_time __user *)arg);
-	case GHOST_IOC_COMMIT_TXN:
-		return ioctl_ghost_commit_txn(
-				(struct ghost_ioc_commit_txn __user *)arg);
-	case GHOST_IOC_SYNC_GROUP_TXN:
-		return ghost_sync_group(
-				(struct ghost_ioc_commit_txn __user *)arg);
-	case GHOST_IOC_TIMERFD_SETTIME:
-		return ghost_timerfd_settime(
-				(struct ghost_ioc_timerfd_settime __user *)arg);
-	}
-	return -ENOIOCTLCMD;
-}
-
-static struct kernfs_ops gf_ops_e_ctl = {
-	.open			= gf_e_open,
-	.release		= gf_e_release,
-	.seq_show		= gf_ctl_show,
-	.write			= gf_ctl_write,
-	.ioctl			= gf_ctl_ioctl,
-};
+//static struct kernfs_ops gf_ops_e_ctl = {
+//	.open			= gf_e_open,
+//	.release		= gf_e_release,
+//	.seq_show		= gf_ctl_show,
+//	.write			= gf_ctl_write,
+//	.ioctl			= gf_ctl_ioctl,
+//};
 
 /*
  * Returns the enclave for f, if f is a ghostfs ctl file.  We could support
@@ -546,323 +547,323 @@ static struct kernfs_ops gf_ops_e_ctl = {
  * need to do it manually here, because this is is a "backdoor" function to get
  * the enclave pointer.  That pointer is kept alive by kernfs.
  */
-struct ghost_enclave *ghostfs_ctl_to_enclave(struct file *f)
-{
-	struct kernfs_node *kn;
+//struct ghost_enclave *ghostfs_ctl_to_enclave(struct file *f)
+//{
+//	struct kernfs_node *kn;
+//
+//	kn = kernfs_node_from_file(f);
+//	if (!kn)
+//		return NULL;
+//	if (kernfs_type(kn) != KERNFS_FILE)
+//		return NULL;
+////	if (kn->attr.ops != &gf_ops_e_ctl)
+////		return NULL;
+//	if (!kernfs_get_active(kn))
+//		return NULL;
+//	WARN_ON(!kn->priv);
+//	return kn->priv;
+//}
+//
+///* Pair this with a successful ghostfs_ctl_to_enclave call. */
+//void ghostfs_put_enclave_ctl(struct file *f)
+//{
+//	struct kernfs_node *kn;
+//
+//	kn = kernfs_node_from_file(f);
+//	if (WARN_ON(!kn))
+//		return;
+//	if (WARN_ON(kernfs_type(kn) != KERNFS_FILE))
+//		return;
+////	if (WARN_ON(kn->attr.ops != &gf_ops_e_ctl))
+////		return;
+//	kernfs_put_active(kn);
+//}
+//
+//static int gf_runnable_timeout_show(struct seq_file *sf, void *v)
+//{
+//	struct ghost_enclave *e = seq_to_e(sf);
+//
+//	seq_printf(sf, "%lld", ktime_to_ms(READ_ONCE(e->max_unscheduled)));
+//	return 0;
+//}
+//
+//static ssize_t gf_runnable_timeout_write(struct kernfs_open_file *of, char *buf,
+//					 size_t len, loff_t off)
+//{
+//	struct ghost_enclave *e = of_to_e(of);
+//	int err;
+//	unsigned long msec;
+//
+//	err = kstrtoul(buf, 0, &msec);
+//	if (err)
+//		return -EINVAL;
+//
+//	WRITE_ONCE(e->max_unscheduled, ms_to_ktime(msec));
+//
+//	return len;
+//}
+//
+//static struct kernfs_ops gf_ops_e_runnable_timeout = {
+//	.open			= gf_e_open,
+//	.release		= gf_e_release,
+//	.seq_show		= gf_runnable_timeout_show,
+//	.write			= gf_runnable_timeout_write,
+//};
+//
+//static int gf_switchto_disabled_show(struct seq_file *sf, void *v)
+//{
+//	struct ghost_enclave *e = seq_to_e(sf);
+//
+//	seq_printf(sf, "%d", READ_ONCE(e->switchto_disabled));
+//	return 0;
+//}
+//
+//static ssize_t gf_switchto_disabled_write(struct kernfs_open_file *of,
+//					  char *buf, size_t len, loff_t off)
+//{
+//	struct ghost_enclave *e = of_to_e(of);
+//	int err;
+//	int tunable;
+//
+//	err = kstrtoint(buf, 0, &tunable);
+//	if (err)
+//		return -EINVAL;
+//
+//	WRITE_ONCE(e->switchto_disabled, !!tunable);
+//
+//	return len;
+//}
+//
+//static struct kernfs_ops gf_ops_e_switchto_disabled = {
+//	.open			= gf_e_open,
+//	.release		= gf_e_release,
+//	.seq_show		= gf_switchto_disabled_show,
+//	.write			= gf_switchto_disabled_write,
+//};
+//
+//static int gf_wake_on_waker_cpu_show(struct seq_file *sf, void *v)
+//{
+//	struct ghost_enclave *e = seq_to_e(sf);
+//
+//	seq_printf(sf, "%d", READ_ONCE(e->wake_on_waker_cpu));
+//	return 0;
+//}
+//
+//static ssize_t gf_wake_on_waker_cpu_write(struct kernfs_open_file *of,
+//					  char *buf, size_t len, loff_t off)
+//{
+//	struct ghost_enclave *e = of_to_e(of);
+//	int err;
+//	int tunable;
+//
+//	err = kstrtoint(buf, 0, &tunable);
+//	if (err)
+//		return -EINVAL;
+//
+//	WRITE_ONCE(e->wake_on_waker_cpu, !!tunable);
+//
+//	return len;
+//}
+//
+//static struct kernfs_ops gf_ops_e_wake_on_waker_cpu = {
+//	.open			= gf_e_open,
+//	.release		= gf_e_release,
+//	.seq_show		= gf_wake_on_waker_cpu_show,
+//	.write			= gf_wake_on_waker_cpu_write,
+//};
+//
+//static int gf_commit_at_tick_show(struct seq_file *sf, void *v)
+//{
+//	struct ghost_enclave *e = seq_to_e(sf);
+//
+//	seq_printf(sf, "%d", READ_ONCE(e->commit_at_tick));
+//	return 0;
+//}
+//
+//static ssize_t gf_commit_at_tick_write(struct kernfs_open_file *of, char *buf,
+//				       size_t len, loff_t off)
+//{
+//	struct ghost_enclave *e = of_to_e(of);
+//	int err;
+//	int tunable;
+//
+//	err = kstrtoint(buf, 0, &tunable);
+//	if (err)
+//		return -EINVAL;
+//
+//	WRITE_ONCE(e->commit_at_tick, !!tunable);
+//
+//	return len;
+//}
+//
+//static struct kernfs_ops gf_ops_e_commit_at_tick = {
+//	.open			= gf_e_open,
+//	.release		= gf_e_release,
+//	.seq_show		= gf_commit_at_tick_show,
+//	.write			= gf_commit_at_tick_write,
+//};
+//
+//static int gf_status_show(struct seq_file *sf, void *v)
+//{
+//	struct ghost_enclave *e = seq_to_e(sf);
+//	unsigned long fl;
+//	bool is_active;
+//	unsigned long nr_tasks;
+//
+//	/*
+//	 * Userspace uses this to find any active enclave, since they don't have
+//	 * any other methods yet to know which enclave to use.
+//	 */
+//	spin_lock_irqsave(&e->lock, fl);
+//	/*
+//	 * We don't need to lock to read agent_online, but eventually we'll
+//	 * check for the presence of an interstitial scheduler too.  This status
+//	 * is for the *enclave*, not the *agent*.
+//	 */
+//	is_active = e->agent_online;
+//	nr_tasks = e->nr_tasks;
+//	spin_unlock_irqrestore(&e->lock, fl);
+//
+//	seq_printf(sf, "active %s\n", is_active ? "yes" : "no");
+//	seq_printf(sf, "nr_tasks %lu\n", nr_tasks);
+//	return 0;
+//}
+//
+//static struct kernfs_ops gf_ops_e_status = {
+//	.open			= gf_e_open,
+//	.release		= gf_e_release,
+//	.seq_show		= gf_status_show,
+//};
 
-	kn = kernfs_node_from_file(f);
-	if (!kn)
-		return NULL;
-	if (kernfs_type(kn) != KERNFS_FILE)
-		return NULL;
-	if (kn->attr.ops != &gf_ops_e_ctl)
-		return NULL;
-	if (!kernfs_get_active(kn))
-		return NULL;
-	WARN_ON(!kn->priv);
-	return kn->priv;
-}
-
-/* Pair this with a successful ghostfs_ctl_to_enclave call. */
-void ghostfs_put_enclave_ctl(struct file *f)
-{
-	struct kernfs_node *kn;
-
-	kn = kernfs_node_from_file(f);
-	if (WARN_ON(!kn))
-		return;
-	if (WARN_ON(kernfs_type(kn) != KERNFS_FILE))
-		return;
-	if (WARN_ON(kn->attr.ops != &gf_ops_e_ctl))
-		return;
-	kernfs_put_active(kn);
-}
-
-static int gf_runnable_timeout_show(struct seq_file *sf, void *v)
-{
-	struct ghost_enclave *e = seq_to_e(sf);
-
-	seq_printf(sf, "%lld", ktime_to_ms(READ_ONCE(e->max_unscheduled)));
-	return 0;
-}
-
-static ssize_t gf_runnable_timeout_write(struct kernfs_open_file *of, char *buf,
-					 size_t len, loff_t off)
-{
-	struct ghost_enclave *e = of_to_e(of);
-	int err;
-	unsigned long msec;
-
-	err = kstrtoul(buf, 0, &msec);
-	if (err)
-		return -EINVAL;
-
-	WRITE_ONCE(e->max_unscheduled, ms_to_ktime(msec));
-
-	return len;
-}
-
-static struct kernfs_ops gf_ops_e_runnable_timeout = {
-	.open			= gf_e_open,
-	.release		= gf_e_release,
-	.seq_show		= gf_runnable_timeout_show,
-	.write			= gf_runnable_timeout_write,
-};
-
-static int gf_switchto_disabled_show(struct seq_file *sf, void *v)
-{
-	struct ghost_enclave *e = seq_to_e(sf);
-
-	seq_printf(sf, "%d", READ_ONCE(e->switchto_disabled));
-	return 0;
-}
-
-static ssize_t gf_switchto_disabled_write(struct kernfs_open_file *of,
-					  char *buf, size_t len, loff_t off)
-{
-	struct ghost_enclave *e = of_to_e(of);
-	int err;
-	int tunable;
-
-	err = kstrtoint(buf, 0, &tunable);
-	if (err)
-		return -EINVAL;
-
-	WRITE_ONCE(e->switchto_disabled, !!tunable);
-
-	return len;
-}
-
-static struct kernfs_ops gf_ops_e_switchto_disabled = {
-	.open			= gf_e_open,
-	.release		= gf_e_release,
-	.seq_show		= gf_switchto_disabled_show,
-	.write			= gf_switchto_disabled_write,
-};
-
-static int gf_wake_on_waker_cpu_show(struct seq_file *sf, void *v)
-{
-	struct ghost_enclave *e = seq_to_e(sf);
-
-	seq_printf(sf, "%d", READ_ONCE(e->wake_on_waker_cpu));
-	return 0;
-}
-
-static ssize_t gf_wake_on_waker_cpu_write(struct kernfs_open_file *of,
-					  char *buf, size_t len, loff_t off)
-{
-	struct ghost_enclave *e = of_to_e(of);
-	int err;
-	int tunable;
-
-	err = kstrtoint(buf, 0, &tunable);
-	if (err)
-		return -EINVAL;
-
-	WRITE_ONCE(e->wake_on_waker_cpu, !!tunable);
-
-	return len;
-}
-
-static struct kernfs_ops gf_ops_e_wake_on_waker_cpu = {
-	.open			= gf_e_open,
-	.release		= gf_e_release,
-	.seq_show		= gf_wake_on_waker_cpu_show,
-	.write			= gf_wake_on_waker_cpu_write,
-};
-
-static int gf_commit_at_tick_show(struct seq_file *sf, void *v)
-{
-	struct ghost_enclave *e = seq_to_e(sf);
-
-	seq_printf(sf, "%d", READ_ONCE(e->commit_at_tick));
-	return 0;
-}
-
-static ssize_t gf_commit_at_tick_write(struct kernfs_open_file *of, char *buf,
-				       size_t len, loff_t off)
-{
-	struct ghost_enclave *e = of_to_e(of);
-	int err;
-	int tunable;
-
-	err = kstrtoint(buf, 0, &tunable);
-	if (err)
-		return -EINVAL;
-
-	WRITE_ONCE(e->commit_at_tick, !!tunable);
-
-	return len;
-}
-
-static struct kernfs_ops gf_ops_e_commit_at_tick = {
-	.open			= gf_e_open,
-	.release		= gf_e_release,
-	.seq_show		= gf_commit_at_tick_show,
-	.write			= gf_commit_at_tick_write,
-};
-
-static int gf_status_show(struct seq_file *sf, void *v)
-{
-	struct ghost_enclave *e = seq_to_e(sf);
-	unsigned long fl;
-	bool is_active;
-	unsigned long nr_tasks;
-
-	/*
-	 * Userspace uses this to find any active enclave, since they don't have
-	 * any other methods yet to know which enclave to use.
-	 */
-	spin_lock_irqsave(&e->lock, fl);
-	/*
-	 * We don't need to lock to read agent_online, but eventually we'll
-	 * check for the presence of an interstitial scheduler too.  This status
-	 * is for the *enclave*, not the *agent*.
-	 */
-	is_active = e->agent_online;
-	nr_tasks = e->nr_tasks;
-	spin_unlock_irqrestore(&e->lock, fl);
-
-	seq_printf(sf, "active %s\n", is_active ? "yes" : "no");
-	seq_printf(sf, "nr_tasks %lu\n", nr_tasks);
-	return 0;
-}
-
-static struct kernfs_ops gf_ops_e_status = {
-	.open			= gf_e_open,
-	.release		= gf_e_release,
-	.seq_show		= gf_status_show,
-};
-
-static struct gf_dirent enclave_dirtab[] = {
-	{
-		.name		= "sw_regions",
-		.mode		= 0555,
-		.is_dir		= true,
-	},
-	{
-		.name		= "agent_online",
-		.mode		= 0664,
-		.ops		= &gf_ops_e_agent_online,
-	},
-	{
-		.name		= "cpu_data",
-		.mode		= 0660,
-		.ops		= &gf_ops_e_cpu_data,
-	},
-	{
-		.name		= "cpulist",
-		.mode		= 0664,
-		.ops		= &gf_ops_e_cpulist,
-	},
-	{
-		.name		= "cpumask",
-		.mode		= 0664,
-		.ops		= &gf_ops_e_cpumask,
-	},
-	{
-		.name		= "ctl",
-		.mode		= 0664,
-		.ops		= &gf_ops_e_ctl,
-	},
-	{
-		.name		= "runnable_timeout",
-		.mode		= 0664,
-		.ops		= &gf_ops_e_runnable_timeout,
-	},
-	{
-		.name		= "switchto_disabled",
-		.mode		= 0664,
-		.ops		= &gf_ops_e_switchto_disabled,
-	},
-	{
-		.name		= "wake_on_waker_cpu",
-		.mode		= 0664,
-		.ops		= &gf_ops_e_wake_on_waker_cpu,
-	},
-	{
-		.name		= "commit_at_tick",
-		.mode		= 0664,
-		.ops		= &gf_ops_e_commit_at_tick,
-	},
-	{
-		.name		= "status",
-		.mode		= 0444,
-		.ops		= &gf_ops_e_status,
-	},
-	{0},
-};
+//static struct gf_dirent enclave_dirtab[] = {
+//	{
+//		.name		= "sw_regions",
+//		.mode		= 0555,
+//		.is_dir		= true,
+//	},
+//	{
+//		.name		= "agent_online",
+//		.mode		= 0664,
+//		.ops		= &gf_ops_e_agent_online,
+//	},
+//	{
+//		.name		= "cpu_data",
+//		.mode		= 0660,
+//		.ops		= &gf_ops_e_cpu_data,
+//	},
+//	{
+//		.name		= "cpulist",
+//		.mode		= 0664,
+//		.ops		= &gf_ops_e_cpulist,
+//	},
+//	//{
+//	//	.name		= "cpumask",
+//	//	.mode		= 0664,
+//	//	.ops		= &gf_ops_e_cpumask,
+//	//},
+////	{
+////		.name		= "ctl",
+////		.mode		= 0664,
+////		.ops		= &gf_ops_e_ctl,
+////	},
+//	{
+//		.name		= "runnable_timeout",
+//		.mode		= 0664,
+//		.ops		= &gf_ops_e_runnable_timeout,
+//	},
+//	{
+//		.name		= "switchto_disabled",
+//		.mode		= 0664,
+//		.ops		= &gf_ops_e_switchto_disabled,
+//	},
+//	{
+//		.name		= "wake_on_waker_cpu",
+//		.mode		= 0664,
+//		.ops		= &gf_ops_e_wake_on_waker_cpu,
+//	},
+//	{
+//		.name		= "commit_at_tick",
+//		.mode		= 0664,
+//		.ops		= &gf_ops_e_commit_at_tick,
+//	},
+//	{
+//		.name		= "status",
+//		.mode		= 0444,
+//		.ops		= &gf_ops_e_status,
+//	},
+//	{0},
+//};
 
 /* Caller is responsible for cleanup.  Removing the parent will suffice. */
-static int gf_add_files(struct kernfs_node *parent, struct gf_dirent *dirtab,
-			struct ghost_enclave *priv)
-{
-	struct gf_dirent *gft;
-	struct kernfs_node *kn;
+//static int gf_add_files(struct kernfs_node *parent, struct gf_dirent *dirtab,
+//			struct ghost_enclave *priv)
+//{
+//	struct gf_dirent *gft;
+//	struct kernfs_node *kn;
+//
+//	for (gft = dirtab; gft->name; gft++) {
+//		if (gft->is_dir) {
+//			kn = kernfs_create_dir(parent, gft->name, gft->mode,
+//					       NULL);
+//		} else {
+//			kn = kernfs_create_file(parent, gft->name, gft->mode,
+//						gft->size, gft->ops, priv);
+//		}
+//		if (IS_ERR(kn))
+//			return PTR_ERR(kn);
+//	}
+//	return 0;
+//}
 
-	for (gft = dirtab; gft->name; gft++) {
-		if (gft->is_dir) {
-			kn = kernfs_create_dir(parent, gft->name, gft->mode,
-					       NULL);
-		} else {
-			kn = kernfs_create_file(parent, gft->name, gft->mode,
-						gft->size, gft->ops, priv);
-		}
-		if (IS_ERR(kn))
-			return PTR_ERR(kn);
-	}
-	return 0;
-}
-
-static int make_enclave(struct kernfs_node *parent, unsigned long id)
-{
-	struct kernfs_node *dir;
-	struct ghost_enclave *e;
-	char name[31];
-	int ret;
-
-	/*
-	 * ghost_create_enclave() is mostly just "alloc and initialize".
-	 * Anything done by it gets undone in enclave_release, and it is not
-	 * discoverable, usable, or otherwise hooked into the kernel until
-	 * kernfs_active().
-	 */
-	e = ghost_create_enclave();
-	if (!e)
-		return -ENOMEM;
-	e->id = id;
-	if (snprintf(name, sizeof(name), "enclave_%lu", id) >= sizeof(name)) {
-		ret = -ENOSPC;
-		goto out_e;
-	}
-
-	dir = kernfs_create_dir(parent, name, 0555, NULL);
-	if (IS_ERR(dir)) {
-		ret = PTR_ERR(dir);
-		goto out_e;
-	}
-	e->enclave_dir = dir;
-
-	ret = gf_add_files(dir, enclave_dirtab, e);
-	if (ret)
-		goto out_dir;
-
-	/*
-	 * Once the enclave has been activated, it is available to userspace and
-	 * can be used for scheduling.  After that, we must destroy it by
-	 * calling ghost_destroy_enclave(), not by releasing the reference.
-	 */
-	kernfs_activate(dir);	/* recursive */
-
-	return 0;
-
-out_dir:
-	kernfs_remove(dir);	/* recursive */
-out_e:
-	kref_put(&e->kref, enclave_release);
-	return ret;
-}
-
+//static int make_enclave(struct kernfs_node *parent, unsigned long id)
+//{
+//	struct kernfs_node *dir;
+//	struct ghost_enclave *e;
+//	char name[31];
+//	int ret;
+//
+//	/*
+//	 * ghost_create_enclave() is mostly just "alloc and initialize".
+//	 * Anything done by it gets undone in enclave_release, and it is not
+//	 * discoverable, usable, or otherwise hooked into the kernel until
+//	 * kernfs_active().
+//	 */
+//	e = ghost_create_enclave();
+//	if (!e)
+//		return -ENOMEM;
+//	e->id = id;
+//	if (snprintf(name, sizeof(name), "enclave_%lu", id) >= sizeof(name)) {
+//		ret = -ENOSPC;
+//		goto out_e;
+//	}
+//
+//	dir = kernfs_create_dir(parent, name, 0555, NULL);
+//	if (IS_ERR(dir)) {
+//		ret = PTR_ERR(dir);
+//		goto out_e;
+//	}
+//	e->enclave_dir = dir;
+//
+//	//ret = gf_add_files(dir, enclave_dirtab, e);
+//	//if (ret)
+//	//	goto out_dir;
+//
+//	/*
+//	 * Once the enclave has been activated, it is available to userspace and
+//	 * can be used for scheduling.  After that, we must destroy it by
+//	 * calling ghost_destroy_enclave(), not by releasing the reference.
+//	 */
+//	kernfs_activate(dir);	/* recursive */
+//
+//	return 0;
+//
+//out_dir:
+//	kernfs_remove(dir);	/* recursive */
+//out_e:
+//	//kref_put(&e->kref, enclave_release);
+//	return ret;
+//}
+//
 static ssize_t gf_top_ctl_write(struct kernfs_open_file *of, char *buf,
 				size_t len, loff_t off)
 {
@@ -875,10 +876,10 @@ static ssize_t gf_top_ctl_write(struct kernfs_open_file *of, char *buf,
 
 	/* This will ignore any extra digits or characters beyond the %u. */
 	ret = sscanf(buf, "create %lu", &x);
-	if (ret == 1) {
-		ret = make_enclave(top_dir, x);
-		return ret ? ret : len;
-	}
+	//if (ret == 1) {
+	//	//ret = make_enclave(top_dir, x);
+	//	return ret ? ret : len;
+	//}
 
 	return -EINVAL;
 }
@@ -918,12 +919,12 @@ static struct gf_dirent top_dirtab[] = {
  */
 static void runtime_adjust_dirtabs(void)
 {
-	struct gf_dirent *enc_txn;
+	//struct gf_dirent *enc_txn;
 
-	enc_txn = gf_find_file(enclave_dirtab, "cpu_data");
-	if (WARN_ON(!enc_txn))
-		return;
-	enc_txn->size = GHOST_CPU_DATA_REGION_SIZE;
+	//enc_txn = gf_find_file(enclave_dirtab, "cpu_data");
+	//if (WARN_ON(!enc_txn))
+	//	return;
+	//enc_txn->size = GHOST_CPU_DATA_REGION_SIZE;
 }
 
 static int __init ghost_setup_root(void)
@@ -936,15 +937,15 @@ static int __init ghost_setup_root(void)
 	if (IS_ERR(fs_root))
 		return PTR_ERR(fs_root);
 
-	ret = gf_add_files(fs_root->kn, top_dirtab, NULL);
-	if (ret) {
-		kernfs_destroy_root(fs_root);
-		return ret;
-	}
+	//ret = gf_add_files(fs_root->kn, top_dirtab, NULL);
+	//if (ret) {
+	//	kernfs_destroy_root(fs_root);
+	//	return ret;
+	//}
 
 	ghost_kfs_root = fs_root;
 
-	runtime_adjust_dirtabs();
+	//runtime_adjust_dirtabs();
 
 	kernfs_activate(ghost_kfs_root->kn);
 
