@@ -1664,6 +1664,7 @@ static inline void dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 
 void activate_task(struct rq *rq, struct task_struct *p, int flags)
 {
+	//printk(KERN_INFO "activate task %p\n", p);
 	enqueue_task(rq, p, flags);
 
 	p->on_rq = TASK_ON_RQ_QUEUED;
@@ -1671,7 +1672,7 @@ void activate_task(struct rq *rq, struct task_struct *p, int flags)
 
 void deactivate_task(struct rq *rq, struct task_struct *p, int flags)
 {
-	//printk(KERN_INFO "deactivate task\n");
+	//printk(KERN_INFO "deactivate task %p\n", p);
 	p->on_rq = (flags & DEQUEUE_SLEEP) ? 0 : TASK_ON_RQ_MIGRATING;
 
 	dequeue_task(rq, p, flags);
@@ -4548,12 +4549,12 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	       struct task_struct *next, struct rq_flags *rf)
 {
 	struct rq *ret;
-	if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
-	printk(KERN_INFO "context_switch rq %p\n", rq);
-	printk(KERN_INFO "context_switch prev %p\n", prev);
-	printk(KERN_INFO "context_switch next %p\n", next);
-	printk(KERN_INFO "context_switch rf %p\n", rf);
-	}
+	//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
+	//printk(KERN_INFO "context_switch rq %p\n", rq);
+	//printk(KERN_INFO "context_switch prev %p\n", prev);
+	//printk(KERN_INFO "context_switch next %p\n", next);
+	//printk(KERN_INFO "context_switch rf %p\n", rf);
+	//}
 	prepare_task_switch(rq, prev, next);
 
 	/*
@@ -4570,19 +4571,19 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	 * kernel ->   user   switch + mmdrop() active
 	 *   user ->   user   switch
 	 */
-	if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
-	printk(KERN_INFO "context_switch 1 rq %p\n", rq);
-	printk(KERN_INFO "context_switch 1 prev %p\n", prev);
-	printk(KERN_INFO "context_switch 1 next %p\n", next);
-	printk(KERN_INFO "context_switch 1 rf %p\n", rf);
-	}
+	//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
+	//printk(KERN_INFO "context_switch 1 rq %p\n", rq);
+	//printk(KERN_INFO "context_switch 1 prev %p\n", prev);
+	//printk(KERN_INFO "context_switch 1 next %p\n", next);
+	//printk(KERN_INFO "context_switch 1 rf %p\n", rf);
+	//}
 	if (!next->mm) {                                // to kernel
-		if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
-		printk(KERN_INFO "context_switch 2 rq %p\n", rq);
-		printk(KERN_INFO "context_switch 2 prev %p\n", prev);
-		printk(KERN_INFO "context_switch 2 next %p\n", next);
-		printk(KERN_INFO "context_switch 2 rf %p\n", rf);
-		}
+		//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
+		//printk(KERN_INFO "context_switch 2 rq %p\n", rq);
+		//printk(KERN_INFO "context_switch 2 prev %p\n", prev);
+		//printk(KERN_INFO "context_switch 2 next %p\n", next);
+		//printk(KERN_INFO "context_switch 2 rf %p\n", rf);
+		//}
 		enter_lazy_tlb(prev->active_mm, next);
 
 		next->active_mm = prev->active_mm;
@@ -4590,19 +4591,19 @@ context_switch(struct rq *rq, struct task_struct *prev,
 			mmgrab(prev->active_mm);
 		else
 			prev->active_mm = NULL;
-		if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
-		printk(KERN_INFO "context_switch 3 rq %p\n", rq);
-		printk(KERN_INFO "context_switch 3 prev %p\n", prev);
-		printk(KERN_INFO "context_switch 3 next %p\n", next);
-		printk(KERN_INFO "context_switch 3 rf %p\n", rf);
-		}
+		//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
+		//printk(KERN_INFO "context_switch 3 rq %p\n", rq);
+		//printk(KERN_INFO "context_switch 3 prev %p\n", prev);
+		//printk(KERN_INFO "context_switch 3 next %p\n", next);
+		//printk(KERN_INFO "context_switch 3 rf %p\n", rf);
+		//}
 	} else {                                        // to user
-		if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
-		printk(KERN_INFO "context_switch 4 rq %p\n", rq);
-		printk(KERN_INFO "context_switch 4 prev %p\n", prev);
-		printk(KERN_INFO "context_switch 4 next %p\n", next);
-		printk(KERN_INFO "context_switch 4 rf %p\n", rf);
-		}
+		//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
+		//printk(KERN_INFO "context_switch 4 rq %p\n", rq);
+		//printk(KERN_INFO "context_switch 4 prev %p\n", prev);
+		//printk(KERN_INFO "context_switch 4 next %p\n", next);
+		//printk(KERN_INFO "context_switch 4 rf %p\n", rf);
+		//}
 		membarrier_switch_mm(rq, prev->active_mm, next->mm);
 		/*
 		 * sys_membarrier() requires an smp_mb() between setting
@@ -4619,19 +4620,19 @@ context_switch(struct rq *rq, struct task_struct *prev,
 			rq->prev_mm = prev->active_mm;
 			prev->active_mm = NULL;
 		}
-		if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
-		printk(KERN_INFO "context_switch 5 rq %p\n", rq);
-		printk(KERN_INFO "context_switch 5 prev %p\n", prev);
-		printk(KERN_INFO "context_switch 5 next %p\n", next);
-		printk(KERN_INFO "context_switch 5 rf %p\n", rf);
-		}
+		//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
+		//printk(KERN_INFO "context_switch 5 rq %p\n", rq);
+		//printk(KERN_INFO "context_switch 5 prev %p\n", prev);
+		//printk(KERN_INFO "context_switch 5 next %p\n", next);
+		//printk(KERN_INFO "context_switch 5 rf %p\n", rf);
+		//}
 	}
-	if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
-	printk(KERN_INFO "context_switch 6 rq %p\n", rq);
-	printk(KERN_INFO "context_switch 6 prev %p\n", prev);
-	printk(KERN_INFO "context_switch 6 next %p\n", next);
-	printk(KERN_INFO "context_switch 6 rf %p\n", rf);
-	}
+	//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
+	//printk(KERN_INFO "context_switch 6 rq %p\n", rq);
+	//printk(KERN_INFO "context_switch 6 prev %p\n", prev);
+	//printk(KERN_INFO "context_switch 6 next %p\n", next);
+	//printk(KERN_INFO "context_switch 6 rf %p\n", rf);
+	//}
 
 	rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
 
@@ -4640,20 +4641,20 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	/* Here we just switch the register state and the stack. */
 	switch_to(prev, next, prev);
 	barrier();
-	if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
-	printk(KERN_INFO "context_switch 7 rq %p\n", rq);
-	printk(KERN_INFO "context_switch 7 prev %p\n", prev);
-	printk(KERN_INFO "context_switch 7 next %p\n", next);
-	printk(KERN_INFO "context_switch 7 rf %p\n", rf);
-	}
+	//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
+	//printk(KERN_INFO "context_switch 7 rq %p\n", rq);
+	//printk(KERN_INFO "context_switch 7 prev %p\n", prev);
+	//printk(KERN_INFO "context_switch 7 next %p\n", next);
+	//printk(KERN_INFO "context_switch 7 rf %p\n", rf);
+	//}
 
 	ret = finish_task_switch(prev);
-	if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
-	printk(KERN_INFO "context_switch end rq %p\n", rq);
-	printk(KERN_INFO "context_switch end prev %p\n", prev);
-	printk(KERN_INFO "context_switch end next %p\n", next);
-	printk(KERN_INFO "context_switch end rf %p\n", rf);
-	}
+	//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
+	//printk(KERN_INFO "context_switch end rq %p\n", rq);
+	//printk(KERN_INFO "context_switch end prev %p\n", prev);
+	//printk(KERN_INFO "context_switch end next %p\n", next);
+	//printk(KERN_INFO "context_switch end rf %p\n", rf);
+	//}
 	return ret;
 }
 

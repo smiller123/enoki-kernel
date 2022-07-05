@@ -82,6 +82,7 @@ static void task_deliver_msg_wakeup(struct rq *rq, struct task_struct *p);
 static void task_deliver_msg_latched(struct rq *rq, struct task_struct *p,
 				     bool latched_preempt);
 static bool cpu_deliver_msg_tick(struct rq *rq, struct task_struct *p);
+static int cpu_deliver_msg_pnt(struct rq *rq, struct ghost_agent_type *agent_type);
 static int task_target_cpu(struct task_struct *p);
 static int agent_target_cpu(struct rq *rq);
 static inline bool ghost_txn_ready(int cpu);
@@ -574,9 +575,13 @@ static inline void force_offcpu(struct rq *rq, bool resched)
 
 static void __update_curr_ghost(struct rq *rq, bool update_sw)
 {
-	printk(KERN_INFO "rq %p", rq);
+	if (0) {
+		printk(KERN_INFO "rq %p", rq);
+	}
 	struct task_struct *curr = rq->curr;
-	printk(KERN_INFO "curr %p", curr);
+	if (0) {
+		printk(KERN_INFO "curr %p", curr);
+	}
 	//struct ghost_status_word *sw = curr->ghost.status_word;
 	//printk(KERN_INFO "sw %p", sw);
 	u64 delta, now;
@@ -640,11 +645,11 @@ static void switched_to_ghost(struct rq *rq, struct task_struct *p)
 	//WRITE_ONCE(status_word->runtime, p->se.sum_exec_runtime);
 
 	if (is_agent(rq, p) || !task_running(rq, p)) {
-		printk(KERN_INFO "switched_to path 1\n");
+		//printk(KERN_INFO "switched_to path 1\n");
 		ghost_task_new(rq, p);
 		//ghost_wake_agent_of(p);    /* no-op if 'p' is an agent */
 	} else {
-		printk(KERN_INFO "switched_to path 2\n");
+		//printk(KERN_INFO "switched_to path 2\n");
 		/*
 		 * Wait for an oncpu task to schedule before advertising
 		 * it to the agent. There isn't much the agent can do as
@@ -720,9 +725,11 @@ static void dequeue_task_ghost(struct rq *rq, struct task_struct *p, int flags)
 	if (task_current(rq, p))
 		update_curr_ghost(rq);
 
+	//printk(KERN_INFO "dequeueng running %d\n", rq->ghost.ghost_nr_running);
 	BUG_ON(rq->ghost.ghost_nr_running <= 0);
 	rq->ghost.ghost_nr_running--;
 	sub_nr_running(rq, 1);
+	//printk(KERN_INFO "dequeue_task_ghost %d, running %d\n", p->pid, rq->ghost.ghost_nr_running);
 
 	WARN_ON_ONCE(!on_ghost_rq(rq, p));
 	list_del_init(&p->ghost.run_list);
@@ -769,8 +776,10 @@ static void put_prev_task_ghost(struct rq *rq, struct task_struct *p)
 static void
 enqueue_task_ghost(struct rq *rq, struct task_struct *p, int flags)
 {
+	//printk(KERN_INFO "enqueuing running %d\n", rq->ghost.ghost_nr_running);
 	add_nr_running(rq, 1);
 	rq->ghost.ghost_nr_running++;
+	//printk(KERN_INFO "enqueue_task_ghost %d, running %d\n", p->pid, rq->ghost.ghost_nr_running);
 
 	WARN_ON_ONCE(on_ghost_rq(rq, p));
 	list_add_tail(&p->ghost.run_list, &rq->ghost.tasks);
@@ -1185,7 +1194,7 @@ bool ghost_produce_prev_msgs(struct rq *rq, struct task_struct *prev)
 		return false;
 
 	if (prev->ghost.new_task) {
-		printk(KERN_INFO "producing messages new task");
+		//printk(KERN_INFO "producing messages new task");
 		prev->ghost.new_task = false;
 		ghost_task_new(rq, prev);
 		//ghost_wake_agent_of(prev);
@@ -1352,6 +1361,8 @@ static struct task_struct *pick_next_task_ghost(struct rq *rq)
 	struct task_struct *agent = rq->ghost.agent;
 	struct task_struct *prev = rq->curr;
 	struct task_struct *next = NULL;
+	int pid_ret;
+	struct ghost_agent_type *p;
 
 	/*
 	 * We made it to ghost's pick_next_task so no need to check whether
@@ -1447,6 +1458,39 @@ static struct task_struct *pick_next_task_ghost(struct rq *rq)
 		goto done;
 	}
 
+	//rcu_read_lock();
+	// TODO: call into our code to pick next task
+	for (p = ghost_agents; p; p = p->next) {
+		pid_ret = cpu_deliver_msg_pnt(rq, p);
+		if (pid_ret > 0) {
+			//struct rq *old_rq;
+			//struct rq_flags rf;
+			//printk(KERN_INFO "got %d from pnt, cpu %d\n", pid_ret, rq->cpu);
+			next = find_task_by_pid_ns(pid_ret, &init_pid_ns);
+			//printk(KERN_INFO "about to lock task rq\n");
+			//old_rq = task_rq_lock(next, &rf);
+			//if (unlikely(task_cpu(next) != rq->cpu)) {
+			//	//VM_BUG_ON(task_running(rq, next));
+			//	//VM_BUG_ON(!task_on_rq_queued(next));
+			//	update_rq_clock(old_rq);
+			//	move_queued_task(old_rq, &rf, next, rq->cpu);
+			//} else {
+			//	invalidate_cached_tasks(old_rq, next);
+			//}
+			//task_rq_unlock(old_rq, next, &rf);
+			//rcu_read_unlock();
+			goto done;
+		}
+	}
+	//rcu_read_unlock();
+	//next = find_task_by_pid_ns(pid, &init_pid_ns);
+	//printk("out of loop\n");
+//		if ((*p)->policy == policy)
+//			break;
+//	return p;
+//	gtid_ret = cpu_deliver_msg_pnt(rq, prev);
+//	printk(KERN_INFO "got %d from pnt\n", gtid_ret);
+
 	/*
 	 * Handle a couple of unusual code paths:
 	 * - 'prev' blocked but it was woken up before it got off the
@@ -1457,7 +1501,7 @@ static struct task_struct *pick_next_task_ghost(struct rq *rq)
 	 *   any higher priority task to switch to.
 	 */
 	if (task_has_ghost_policy(prev) && prev->state == TASK_RUNNING) {
-		printk(KERN_INFO "can pick prev");
+		//printk(KERN_INFO "can pick prev");
 		/*
 		 * When an agent blocks via ghost_run() we end up here with
 		 * 'prev == agent' via schedule(). Without the check below
@@ -3065,7 +3109,7 @@ int ghost_setscheduler(struct task_struct *p, struct rq *rq,
 	int newpolicy = attr->sched_policy;
 	int ret;
 	struct ghost_agent_type ** agent_type;
-	printk(KERN_INFO "in ghost_setscheduler");
+	//printk(KERN_INFO "in ghost_setscheduler");
 
 	if (WARN_ON_ONCE(!ghost_policy(oldpolicy) && !ghost_policy(newpolicy)))
 		return -EINVAL;
@@ -3319,14 +3363,14 @@ err_vmalloc:
 	return error;
 }
 
-void ghost_queue_register_process_func(struct ghost_queue *q,
-				       void (*func)(int type, int msglen,
-					            uint32_t barrier,
-				                    void *payload,
-						    int payload_size)) {
-	q->process_message = func;
-}
-EXPORT_SYMBOL(ghost_queue_register_process_func);
+//void ghost_queue_register_process_func(struct ghost_queue *q,
+//				       int (*func)(int type, int msglen,
+//					            uint32_t barrier,
+//				                    void *payload,
+//						    int payload_size)) {
+//	q->process_message = func;
+//}
+//EXPORT_SYMBOL(ghost_queue_register_process_func);
 
 static struct task_struct *find_task_by_gtid(gtid_t gtid)
 {
@@ -3906,7 +3950,10 @@ ring_avail_slots(struct ghost_ring *r, uint32_t maxslots)
 	return slots;
 }
 
-static int _produce(struct ghost_queue *q, uint32_t barrier, int type,
+//static int _produce(struct ghost_queue *q, uint32_t barrier, int type,
+//		    void *payload, int payload_size,
+//		    struct ghost_agent_type *agent_type)
+static int _produce(uint32_t barrier, int type,
 		    void *payload, int payload_size,
 		    struct ghost_agent_type *agent_type)
 {
@@ -3915,6 +3962,7 @@ static int _produce(struct ghost_queue *q, uint32_t barrier, int type,
 	struct avail_slots avail;
 	ulong flags;
 	int msglen;
+	int ret;
 
 	//const int nelems = q->nelems;
 	const int slot_size = sizeof(struct ghost_msg);
@@ -3924,7 +3972,7 @@ static int _produce(struct ghost_queue *q, uint32_t barrier, int type,
 	msglen = sizeof(struct ghost_msg) + payload_size;
 	if (WARN_ON_ONCE(msglen > USHRT_MAX))
 		return -EINVAL;
-	printk(KERN_INFO "sending a message");
+	//printk(KERN_INFO "sending a message");
 	//slots_needed = ALIGN(msglen, slot_size) / slot_size;
 
 	//spin_lock_irqsave(&q->lock, flags);
@@ -3953,10 +4001,14 @@ static int _produce(struct ghost_queue *q, uint32_t barrier, int type,
 	//	hidx = 0;
 	//	slots_skipped = avail.ahead;
 	//}
+	rcu_read_lock();
+	ret = 0;
 	if (agent_type && agent_type->process_message) {
-		printk(KERN_INFO "calling message send");
-		agent_type->process_message(type, msglen, barrier, payload, payload_size);
+		//printk(KERN_INFO "calling message send");
+		agent_type->process_message(type, msglen, barrier, payload, payload_size, &ret);
+		//printk(KERN_INFO "got ret %d\n", ret);
 	}
+	rcu_read_unlock();
 
 	//ring->msgs[hidx].type = type;
 	//ring->msgs[hidx].length = msglen;
@@ -3969,21 +4021,21 @@ static int _produce(struct ghost_queue *q, uint32_t barrier, int type,
 
 	//spin_unlock_irqrestore(&q->lock, flags);
 
-	return 0;
+	return ret;
 }
 
 
-static inline int __produce_for_task(struct task_struct *p,
+static inline int __produce_for_task(struct ghost_agent_type *agent_type,
 				     struct bpf_ghost_msg *msg,
 				     uint32_t barrier)
 {
 	void *payload;
 	int payload_size;
-	printk(KERN_INFO "msg %p", msg);
-	printk(KERN_INFO "p %p", p);
-	printk(KERN_INFO "msg->seqnum %d", msg->seqnum);
-	printk(KERN_INFO "msg->type %d", msg->type);
-	printk(KERN_INFO "msg new %d", MSG_TASK_NEW);
+	//printk(KERN_INFO "msg %p", msg);
+	//printk(KERN_INFO "p %p", p);
+	//printk(KERN_INFO "msg->seqnum %d", msg->seqnum);
+	//printk(KERN_INFO "msg->type %d", msg->type);
+	//printk(KERN_INFO "msg new %d", MSG_TASK_NEW);
 
 	//return 0;
 	msg->seqnum = barrier;
@@ -4041,6 +4093,10 @@ static inline int __produce_for_task(struct task_struct *p,
 		payload = &msg->cpu_not_idle;
 		payload_size = sizeof(msg->cpu_not_idle);
 		break;
+	case MSG_PNT:
+		payload = &msg->pnt;
+		payload_size = sizeof(msg->pnt);
+		break;
 	default:
 		WARN(1, "unknown bpg_ghost_msg type %d!\n", msg->type);
 		return -EINVAL;
@@ -4048,17 +4104,17 @@ static inline int __produce_for_task(struct task_struct *p,
 	//printk(KERN_INFO "checking bpf_msg_send");
 	//if (!ghost_bpf_msg_send(p->ghost.enclave, msg))
 	//	return -ENOMSG;
-	printk(KERN_INFO "calling _produce");
+	//printk(KERN_INFO "calling _produce");
 	//return -1;
-	return _produce(p->ghost.dst_q, barrier, msg->type,
-			payload, payload_size, p->ghost.agent_type);
+	return _produce(barrier, msg->type,
+			payload, payload_size, agent_type);
 }
 
 static inline int produce_for_task(struct task_struct *p,
 				   struct bpf_ghost_msg *msg)
 {
-	printk(KERN_INFO "produce_for_task msg struct %p\n", p);
-	return __produce_for_task(p, msg, task_barrier_get(p));
+	//printk(KERN_INFO "produce_for_task msg struct %p\n", p);
+	return __produce_for_task(p->ghost.agent_type, msg, task_barrier_get(p));
 }
 
 static inline int produce_for_agent(struct rq *rq,
@@ -4067,7 +4123,17 @@ static inline int produce_for_agent(struct rq *rq,
 	struct task_struct *agent = rq->ghost.agent;
 
 	agent_barrier_inc(rq);
-	return __produce_for_task(agent, msg, agent_barrier_get(agent));
+	return __produce_for_task(agent->ghost.agent_type, msg, agent_barrier_get(agent));
+}
+
+static inline int produce_for_agent_type(struct rq *rq,
+				    struct ghost_agent_type *agent_type,
+				    struct bpf_ghost_msg *msg)
+{
+	//struct task_struct *agent = rq->ghost.agent;
+
+	//agent_barrier_inc(rq);
+	return __produce_for_task(agent_type, msg, 0);
 }
 
 /*
@@ -4255,7 +4321,9 @@ static void task_deliver_msg_task_new(struct rq *rq, struct task_struct *p,
 	}
 
 	msg->type = MSG_TASK_NEW;
-	payload->gtid = gtid(p);
+	//payload->gtid = gtid(p);
+	//printk(KERN_INFO "new task pid %d\n", p->pid);
+	payload->pid = p->pid;
 	payload->runnable = runnable;
 	payload->runtime = p->se.sum_exec_runtime;
 	//if (_get_sw_info(p->ghost.enclave, p->ghost.status_word,
@@ -4310,7 +4378,8 @@ static void task_deliver_msg_preempt(struct rq *rq, struct task_struct *p,
 	WARN_ON_ONCE(from_switchto && rq->ghost.switchto_count > 0);
 
 	msg->type = MSG_TASK_PREEMPT;
-	payload->gtid = gtid(p);
+	//payload->gtid = gtid(p);
+	payload->pid = p->pid;
 	payload->runtime = p->se.sum_exec_runtime;
 	payload->cpu = cpu_of(rq);
 	payload->cpu_seqnum = ++rq->ghost.cpu_seqnum;
@@ -4330,7 +4399,8 @@ static void task_deliver_msg_blocked(struct rq *rq, struct task_struct *p)
 		return;
 
 	msg->type = MSG_TASK_BLOCKED;
-	payload->gtid = gtid(p);
+	//payload->gtid = gtid(p);
+	payload->pid = p->pid;
 	payload->runtime = p->se.sum_exec_runtime;
 	payload->cpu = cpu_of(rq);
 	payload->cpu_seqnum = ++rq->ghost.cpu_seqnum;
@@ -4440,7 +4510,8 @@ static void task_deliver_msg_wakeup(struct rq *rq, struct task_struct *p)
 		return;
 
 	msg->type = MSG_TASK_WAKEUP;
-	payload->gtid = gtid(p);
+	//payload->gtid = gtid(p);
+	payload->pid = p->pid;
 	payload->agent_data = 0;
 	payload->deferrable = deferrable_wakeup(p);
 	payload->last_ran_cpu = p->ghost.twi.last_ran_cpu;
@@ -4465,6 +4536,29 @@ static void task_deliver_msg_switchto(struct rq *rq, struct task_struct *p)
 	payload->cpu_seqnum = ++rq->ghost.cpu_seqnum;
 
 	produce_for_task(p, msg);
+}
+
+static inline int cpu_deliver_msg_pnt(struct rq *rq,
+				      struct ghost_agent_type *agent_type)
+{
+	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct ghost_msg_payload_pnt *payload = &msg->pnt;
+	//struct ghost_enclave *e;
+
+	//if (cpu_skip_message(rq))
+	//	return false;
+	//rcu_read_lock();
+	//e = rcu_dereference(per_cpu(enclave, cpu_of(rq)));
+	//if (!e || ghost_bpf_skip_tick(e, rq)) {
+	//	rcu_read_unlock();
+	//	return false;
+	//}
+	//rcu_read_unlock();
+
+	msg->type = MSG_PNT;
+	payload->cpu = cpu_of(rq);
+
+	return produce_for_agent_type(rq, agent_type, msg);
 }
 
 static void release_from_ghost(struct rq *rq, struct task_struct *p)
@@ -4794,8 +4888,8 @@ static void _ghost_task_preempted(struct rq *rq, struct task_struct *p,
 				  bool was_latched)
 {
 	bool from_switchto;
-	printk(KERN_INFO "_ghost_task_preempted rq %p\n", rq);
-	printk(KERN_INFO "_ghost_task_preempted p %p\n", p);
+	//printk(KERN_INFO "_ghost_task_preempted rq %p\n", rq);
+	//printk(KERN_INFO "_ghost_task_preempted p %p\n", p);
 
 	lockdep_assert_held(&rq->lock);
 	VM_BUG_ON(task_rq(p) != rq);
@@ -4817,7 +4911,7 @@ static void _ghost_task_preempted(struct rq *rq, struct task_struct *p,
 	from_switchto = was_latched ? false : ghost_in_switchto(rq);
 
 	/* Produce MSG_TASK_PREEMPT into 'p->ghost.dst_q' */
-	//task_deliver_msg_preempt(rq, p, from_switchto, was_latched);
+	task_deliver_msg_preempt(rq, p, from_switchto, was_latched);
 
 	/*
 	 * Wakeup agent on this CPU.

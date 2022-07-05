@@ -254,18 +254,20 @@ enum {
 	MSG_CPU_TICK		= _MSG_CPU_FIRST,
 	MSG_CPU_TIMER_EXPIRED,
 	MSG_CPU_NOT_IDLE,	/* requested via run_flags: NEED_CPU_NOT_IDLE */
+	MSG_PNT,
 };
 
 /* TODO: Move payload to header once all clients updated. */
 struct ghost_msg_payload_task_new {
-	uint64_t gtid;
+	uint64_t pid;
 	uint64_t runtime;	/* cumulative runtime in ns */
 	uint16_t runnable;
 	struct ghost_sw_info sw_info;
 };
 
 struct ghost_msg_payload_task_preempt {
-	uint64_t gtid;
+	//uint64_t gtid;
+	uint64_t pid;
 	uint64_t runtime;	/* cumulative runtime in ns */
 	uint64_t cpu_seqnum;	/* cpu sequence number */
 	uint64_t agent_data;	/* used by bpf */
@@ -284,7 +286,8 @@ struct ghost_msg_payload_task_yield {
 };
 
 struct ghost_msg_payload_task_blocked {
-	uint64_t gtid;
+	//uint64_t gtid;
+	uint64_t pid;
 	uint64_t runtime;	/* cumulative runtime in ns */
 	uint64_t cpu_seqnum;
 	int cpu;
@@ -308,7 +311,8 @@ struct ghost_msg_payload_task_affinity_changed {
 };
 
 struct ghost_msg_payload_task_wakeup {
-	uint64_t gtid;
+	//uint64_t gtid;
+	uint64_t pid;
 	uint64_t agent_data;	/* used by bpf */
 	char deferrable;	/* bool: 0 or 1 */
 
@@ -356,6 +360,10 @@ struct ghost_msg_payload_timer {
 	uint64_t cookie;
 };
 
+struct ghost_msg_payload_pnt {
+	int cpu;
+};
+
 struct bpf_ghost_msg {
 	union {
 		struct ghost_msg_payload_task_dead	dead;
@@ -371,6 +379,7 @@ struct bpf_ghost_msg {
 		struct ghost_msg_payload_cpu_tick	cpu_tick;
 		struct ghost_msg_payload_timer		timer;
 		struct ghost_msg_payload_cpu_not_idle	cpu_not_idle;
+		struct ghost_msg_payload_pnt		pnt;
 	};
 	uint16_t type;
 	uint32_t seqnum;

@@ -27,7 +27,7 @@
 struct ghost_agent_type {
 	int policy;
 	void (*process_message) (int type, int msglen, uint32_t barrier,
-			void *payload, int payload_size);
+			void *payload, int payload_size, int *retval);
 	struct module *owner;
 	struct ghost_agent_type * next;
 };
@@ -132,10 +132,10 @@ struct ghost_queue {
 
 struct ghost_queue *fd_to_queue(struct fd f);
 
-void ghost_queue_register_process_func(struct ghost_queue *q,
-		                       void (*func)(int type, int msglen,
-					       uint32_t barrier, void *payload,
-					       int payload_size));
+//void ghost_queue_register_process_func(struct ghost_queue *q,
+//		                       int (*func)(int type, int msglen,
+//					       uint32_t barrier, void *payload,
+//					       int payload_size));
 
 // NOLINTEND
 
