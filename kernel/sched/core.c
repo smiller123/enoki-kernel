@@ -1765,18 +1765,18 @@ void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags)
 		resched_curr(rq);
 	}
 #ifdef CONFIG_SCHED_CLASS_GHOST
-	else if (&ghost_agent_sched_class > rq->curr->sched_class &&
-		 is_agent(rq, p)) {
-		/*
-		 * Normally, ghost threads have the lowest
-		 * priority. The ghost agent thread, however, is
-		 * allowed to run in the higher priority ghost
-		 * agent class when it would otherwise be
-		 * preempted by another sched_class. See
-		 * GHOST_SW_BOOST_PRIO for more details.
-		 */
-		resched_curr(rq);
-	}
+	//else if (&ghost_agent_sched_class > rq->curr->sched_class &&
+	//	 is_agent(rq, p)) {
+	//	/*
+	//	 * Normally, ghost threads have the lowest
+	//	 * priority. The ghost agent thread, however, is
+	//	 * allowed to run in the higher priority ghost
+	//	 * agent class when it would otherwise be
+	//	 * preempted by another sched_class. See
+	//	 * GHOST_SW_BOOST_PRIO for more details.
+	//	 */
+	//	resched_curr(rq);
+	//}
 #endif
 
 	/*
@@ -4345,7 +4345,7 @@ done:
 		 */
 		WARN_ON_ONCE(task_has_ghost_policy(next) &&
 			     !is_agent(rq, next));
-		ghost_latched_task_preempted(rq);
+		//ghost_latched_task_preempted(rq);
 
 		/*
 		 * XXX the WARN above is susceptible to a false-negative
@@ -4508,8 +4508,8 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 void schedule_callback(struct rq *rq)
 {
 #ifdef CONFIG_SCHED_CLASS_GHOST
-	if (unlikely(ghost_need_rendezvous(rq)))
-		ghost_wait_for_rendezvous(rq);
+	//if (unlikely(ghost_need_rendezvous(rq)))
+	//	ghost_wait_for_rendezvous(rq);
 #endif
 }
 
@@ -8227,9 +8227,9 @@ void __init sched_init(void)
 	       &rt_sched_class + 1   != &dl_sched_class);
 #ifdef CONFIG_SCHED_CLASS_GHOST
 	BUG_ON(&idle_sched_class + 1 != &ghost_sched_class ||
-	       &ghost_sched_class + 1 != &fair_sched_class ||
-	       &dl_sched_class + 1 != &ghost_agent_sched_class ||
-	       &ghost_agent_sched_class + 1 != &stop_sched_class);
+	       &ghost_sched_class + 1 != &fair_sched_class );
+	       //&dl_sched_class + 1 != &ghost_agent_sched_class ||
+	       //&ghost_agent_sched_class + 1 != &stop_sched_class);
 #else
 	BUG_ON(&idle_sched_class + 1 != &fair_sched_class);
 #ifdef CONFIG_SMP

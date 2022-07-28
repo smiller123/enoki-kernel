@@ -598,7 +598,7 @@ struct sched_ghost_entity {
 	ktime_t last_runnable_at;
 
 	/* The following fields are protected by 'task_rq(p)->lock' */
-	struct ghost_queue *dst_q;
+	//struct ghost_queue *dst_q;
 	//struct ghost_status_word *status_word;
 	//struct ghost_enclave *enclave;
 	struct ghost_agent_type *agent_type;
@@ -647,7 +647,7 @@ struct sched_ghost_entity {
 	struct rcu_head rcu;
 };
 
-extern void ghost_commit_greedy_txn(void);
+//extern void ghost_commit_greedy_txn(void);
 extern void ghost_timerfd_triggered(struct timerfd_ghost *timer);
 
 #endif
@@ -1896,7 +1896,7 @@ static __always_inline void scheduler_ipi(void)
 	 */
 	if (is_idle_task(current))
 		rcu_irq_enter();
-	ghost_commit_greedy_txn();
+	//ghost_commit_greedy_txn();
 	if (is_idle_task(current))
 		rcu_irq_exit();
 #endif

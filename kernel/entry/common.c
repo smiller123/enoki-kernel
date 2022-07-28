@@ -189,7 +189,7 @@ static unsigned long exit_to_user_mode_loop(struct pt_regs *regs,
 		 */
 		local_irq_disable_exit_to_user();
 #ifdef CONFIG_SCHED_CLASS_GHOST
-		ghost_commit_greedy_txn();
+		//ghost_commit_greedy_txn();
 #endif
 		ti_work = READ_ONCE(current_thread_info()->flags);
 	}
@@ -204,7 +204,7 @@ static void exit_to_user_mode_prepare(struct pt_regs *regs)
 
 	lockdep_assert_irqs_disabled();
 #ifdef CONFIG_SCHED_CLASS_GHOST
-	ghost_commit_greedy_txn();
+	//ghost_commit_greedy_txn();
 #endif
 
 	if (unlikely(ti_work & EXIT_TO_USER_MODE_WORK))

@@ -43,8 +43,8 @@ static DEFINE_SPINLOCK(cpu_rsvp);
 static struct cpumask cpus_in_enclave;	/* protected by cpu_rsvp lock */
 
 /* The ghost_txn pointer equals NULL or &enclave->cpu_data[this_cpu].txn */
-static DEFINE_PER_CPU_READ_MOSTLY(struct ghost_txn *, ghost_txn);
-static DEFINE_PER_CPU_READ_MOSTLY(struct ghost_enclave *, enclave);
+//static DEFINE_PER_CPU_READ_MOSTLY(struct ghost_txn *, ghost_txn);
+//static DEFINE_PER_CPU_READ_MOSTLY(struct ghost_enclave *, enclave);
 
 static DEFINE_PER_CPU(int64_t, sync_group_cookie);
 /*
@@ -84,12 +84,12 @@ static void task_deliver_msg_latched(struct rq *rq, struct task_struct *p,
 static bool cpu_deliver_msg_tick(struct rq *rq, struct task_struct *p);
 static int cpu_deliver_msg_pnt(struct rq *rq, struct ghost_agent_type *agent_type);
 static int task_target_cpu(struct task_struct *p);
-static int agent_target_cpu(struct rq *rq);
-static inline bool ghost_txn_ready(int cpu);
-static bool _ghost_commit_pending_txn(int cpu, int where);
-static inline void ghost_claim_and_kill_txn(int cpu, enum ghost_txn_state err);
+//static int agent_target_cpu(struct rq *rq);
+//static inline bool ghost_txn_ready(int cpu);
+//static bool _ghost_commit_pending_txn(int cpu, int where);
+//static inline void ghost_claim_and_kill_txn(int cpu, enum ghost_txn_state err);
 //static void ghost_commit_all_greedy_txns(void);
-static void ghost_commit_pending_txn(int where);
+//static void ghost_commit_pending_txn(int where);
 static void release_from_ghost(struct rq *rq, struct task_struct *p);
 static void ghost_wake_agent_on(int cpu);
 static void _ghost_task_preempted(struct rq *rq, struct task_struct *p,
@@ -484,48 +484,48 @@ static inline uint32_t barrier_get(struct task_struct *p)
 	return task_barrier_get(p);
 }
 
-static inline void invalidate_cached_tasks(struct rq *rq, struct task_struct *p)
-{
-	lockdep_assert_held(&rq->lock);
+//static inline void invalidate_cached_tasks(struct rq *rq, struct task_struct *p)
+//{
+//	lockdep_assert_held(&rq->lock);
+//
+//	if (unlikely(rq->ghost.latched_task == p)) {
+//		if (rq->ghost.skip_latched_preemption) {
+//			/*
+//			 * We cannot produce a TASK_PREEMPT msg here.
+//			 *
+//			 * This is called via ghost_move_task() during txn
+//			 * commit after validating the task to be committed.
+//			 * Thus if we produce a TASK_PREEMPT msg it won't be
+//			 * caught by the task->barrier and prevent the txn
+//			 * from committing.
+//			 *
+//			 * Then it is possible to observe back-to-back
+//			 * TASK_PREEMPT msgs in the agent (the second
+//			 * would be due to a real preemption) which will
+//			 * trigger a 'task->preempted' CHECK-fail in the agent.
+//			 */
+//			rq->ghost.latched_task = NULL;
+//		} else {
+//			/*
+//			 * This is called via non-ghost move_queued_task()
+//			 * callers (e.g. sched_setaffinity). We produce a
+//			 * TASK_PREEMPT msg to let the agent know that the
+//			 * task is no longer latched (without this the task
+//			 * would be stranded).
+//			 */
+//			ghost_latched_task_preempted(rq);
+//		}
+//	}
+//
+//	rq->ghost.skip_latched_preemption = false;
+//}
 
-	if (unlikely(rq->ghost.latched_task == p)) {
-		if (rq->ghost.skip_latched_preemption) {
-			/*
-			 * We cannot produce a TASK_PREEMPT msg here.
-			 *
-			 * This is called via ghost_move_task() during txn
-			 * commit after validating the task to be committed.
-			 * Thus if we produce a TASK_PREEMPT msg it won't be
-			 * caught by the task->barrier and prevent the txn
-			 * from committing.
-			 *
-			 * Then it is possible to observe back-to-back
-			 * TASK_PREEMPT msgs in the agent (the second
-			 * would be due to a real preemption) which will
-			 * trigger a 'task->preempted' CHECK-fail in the agent.
-			 */
-			rq->ghost.latched_task = NULL;
-		} else {
-			/*
-			 * This is called via non-ghost move_queued_task()
-			 * callers (e.g. sched_setaffinity). We produce a
-			 * TASK_PREEMPT msg to let the agent know that the
-			 * task is no longer latched (without this the task
-			 * would be stranded).
-			 */
-			ghost_latched_task_preempted(rq);
-		}
-	}
-
-	rq->ghost.skip_latched_preemption = false;
-}
-
-static inline bool is_cached_task(struct rq *rq, struct task_struct *p)
-{
-	lockdep_assert_held(&rq->lock);
-
-	return rq->ghost.latched_task == p;
-}
+//static inline bool is_cached_task(struct rq *rq, struct task_struct *p)
+//{
+//	lockdep_assert_held(&rq->lock);
+//
+//	return rq->ghost.latched_task == p;
+//}
 
 static inline void schedule_next(struct rq *rq, gtid_t gtid, bool resched)
 {
@@ -550,8 +550,8 @@ static inline void schedule_next(struct rq *rq, gtid_t gtid, bool resched)
 		 * doesn't "lose" this schedule-to-agent edge. In other words
 		 * we want that ghost_run() to return -ESTALE.
 		 */
-		agent_barrier_inc(rq);
-		rq->ghost.blocked_in_run = false;
+		//agent_barrier_inc(rq);
+		//rq->ghost.blocked_in_run = false;
 	} else if (gtid == GHOST_NULL_GTID) {
 		rq->ghost.must_resched = true;
 	}
@@ -621,7 +621,7 @@ static void prio_changed_ghost(struct rq *rq, struct task_struct *p, int old)
 	/*
 	 * XXX produce MSG_TASK_PRIO_CHANGE into p->ghost.dst_q.
 	 */
-	ghost_wake_agent_of(p);
+	//ghost_wake_agent_of(p);
 
 	/*
 	 * Note that if a running task changes priority then
@@ -691,7 +691,7 @@ static void switched_from_ghost(struct rq *rq, struct task_struct *p)
 		 * a fatal error by the agent).
 		 */
 		_ghost_task_new(rq, p, /*runnable=*/false);
-		ghost_wake_agent_of(p);
+		//ghost_wake_agent_of(p);
 	}
 
 	release_from_ghost(rq, p);
@@ -739,8 +739,8 @@ static void dequeue_task_ghost(struct rq *rq, struct task_struct *p, int flags)
 	 * it isn't spurious). Although unlikely this can happen via the
 	 * ghost_run()->move_queued_task() code path.
 	 */
-	if (!spurious)
-		invalidate_cached_tasks(rq, p);
+	//if (!spurious)
+	//	invalidate_cached_tasks(rq, p);
 
 	//if (sleeping) {
 	//	WARN_ON_ONCE(!(sw->flags & GHOST_SW_TASK_RUNNABLE));
@@ -935,23 +935,23 @@ static void task_tick_ghost(struct rq *rq, struct task_struct *p, int queued)
 		 * latched, any trip through schedule() would trigger a latched
 		 * preemption via pick_next_ghost_agent().
 		 */
-		if (rq->ghost.latched_task)
-			ghost_latched_task_preempted(rq);
+		//if (rq->ghost.latched_task)
+		//	ghost_latched_task_preempted(rq);
 	}
 
 	__update_curr_ghost(rq, false);
 
-	if (cpu_deliver_msg_tick(rq, p))
-		ghost_wake_agent_on(agent_target_cpu(rq));
+	//if (cpu_deliver_msg_tick(rq, p))
+	//	ghost_wake_agent_on(agent_target_cpu(rq));
 }
 
 static int balance_ghost(struct rq *rq, struct task_struct *prev,
 			 struct rq_flags *rf)
 {
 
-	struct task_struct *agent = rq->ghost.agent;
+	//struct task_struct *agent = rq->ghost.agent;
 
-	if (!agent || !agent->on_rq)
+	//if (!agent || !agent->on_rq)
 		return 0;
 
 	/*
@@ -959,30 +959,30 @@ static int balance_ghost(struct rq *rq, struct task_struct *prev,
 	 * - there is no higher priority runnable task.
 	 * - there is no 'latched_task'
 	 */
-	if (!rq->ghost.latched_task && !rq_adj_nr_running(rq) &&
-	    ghost_txn_ready(cpu_of(rq))) {
-		rq_unpin_lock(rq, rf);
-		raw_spin_unlock(&rq->lock);
+	//if (!rq->ghost.latched_task && !rq_adj_nr_running(rq) &&
+	//    ghost_txn_ready(cpu_of(rq))) {
+	//	rq_unpin_lock(rq, rf);
+	//	raw_spin_unlock(&rq->lock);
 
-		ghost_commit_pending_txn(COMMIT_AT_SCHEDULE);
+	//	ghost_commit_pending_txn(COMMIT_AT_SCHEDULE);
 
-		raw_spin_lock(&rq->lock);
-		rq_repin_lock(rq, rf);
-	}
+	//	raw_spin_lock(&rq->lock);
+	//	rq_repin_lock(rq, rf);
+	//}
 
-	if (!rq->ghost.latched_task && rq->ghost.pnt_bpf_once) {
-		rq->ghost.pnt_bpf_once = false;
-		/* If there is a BPF program, this will unlock the RQ */
-		rq->ghost.in_pnt_bpf = true;
-		//ghost_bpf_pnt(agent->ghost.enclave, rq, rf);
-		rq->ghost.in_pnt_bpf = false;
-	}
+	//if (!rq->ghost.latched_task && rq->ghost.pnt_bpf_once) {
+	//	rq->ghost.pnt_bpf_once = false;
+	//	/* If there is a BPF program, this will unlock the RQ */
+	//	rq->ghost.in_pnt_bpf = true;
+	//	//ghost_bpf_pnt(agent->ghost.enclave, rq, rf);
+	//	rq->ghost.in_pnt_bpf = false;
+	//}
 
-	/*
-	 * We have something to run in 'latched_task' or a higher priority
-	 * sched_class became runnable while the rq->lock was dropped.
-	 */
-	return rq->ghost.latched_task || rq_adj_nr_running(rq);
+	///*
+	// * We have something to run in 'latched_task' or a higher priority
+	// * sched_class became runnable while the rq->lock was dropped.
+	// */
+	//return rq->ghost.latched_task || rq_adj_nr_running(rq);
 }
 
 static int select_task_rq_ghost(struct task_struct *p, int cpu, int wake_flags)
@@ -1111,44 +1111,44 @@ static int validate_next_offcpu(struct rq *rq, struct task_struct *next,
 	return 0;
 }
 
-static inline struct task_struct *pick_agent(struct rq *rq)
-{
-	struct task_struct *agent = rq->ghost.agent;
-	struct task_struct *next = NULL;
-
-	BUG_ON(!agent || !agent->on_rq || !on_ghost_rq(rq, agent));
-
-	/*
-	 * 'agent' is on_rq so 'ghost_nr_running' must be at least 1.
-	 */
-	BUG_ON(rq->ghost.ghost_nr_running < 1);
-
-	if (READ_ONCE(rq->ghost.agent_should_wake)) {
-		WRITE_ONCE(rq->ghost.agent_should_wake, false);
-		/*
-		 * Preemptively sync the agent_barrier, since we know our caller
-		 * only incremented the RQ agent_barrier.
-		 */
-		(void) agent_barrier_get(agent);
-		rq->ghost.blocked_in_run = false;
-	}
-
-	/*
-	 * Unblock the agent if it has a signal to handle.
-	 */
-	if (unlikely(signal_pending(agent)))
-		rq->ghost.blocked_in_run = false;
-
-	/*
-	 * If the agent is not in a state where it is productively scheduling
-	 * then try to get it there as soon as possible. This includes the
-	 * case where the kernel has posted new messages for the agent.
-	 */
-	if (!rq->ghost.blocked_in_run)
-		next = agent;
-
-	return next;
-}
+//static inline struct task_struct *pick_agent(struct rq *rq)
+//{
+//	struct task_struct *agent = rq->ghost.agent;
+//	struct task_struct *next = NULL;
+//
+//	BUG_ON(!agent || !agent->on_rq || !on_ghost_rq(rq, agent));
+//
+//	/*
+//	 * 'agent' is on_rq so 'ghost_nr_running' must be at least 1.
+//	 */
+//	BUG_ON(rq->ghost.ghost_nr_running < 1);
+//
+//	if (READ_ONCE(rq->ghost.agent_should_wake)) {
+//		WRITE_ONCE(rq->ghost.agent_should_wake, false);
+//		/*
+//		 * Preemptively sync the agent_barrier, since we know our caller
+//		 * only incremented the RQ agent_barrier.
+//		 */
+//		(void) agent_barrier_get(agent);
+//		rq->ghost.blocked_in_run = false;
+//	}
+//
+//	/*
+//	 * Unblock the agent if it has a signal to handle.
+//	 */
+//	if (unlikely(signal_pending(agent)))
+//		rq->ghost.blocked_in_run = false;
+//
+//	/*
+//	 * If the agent is not in a state where it is productively scheduling
+//	 * then try to get it there as soon as possible. This includes the
+//	 * case where the kernel has posted new messages for the agent.
+//	 */
+//	if (!rq->ghost.blocked_in_run)
+//		next = agent;
+//
+//	return next;
+//}
 
 static inline void ghost_prepare_switch(struct rq *rq, struct task_struct *prev,
 					struct task_struct *next)
@@ -1216,145 +1216,147 @@ bool ghost_produce_prev_msgs(struct rq *rq, struct task_struct *prev)
 	 * off the cpu we can safely let the agent know about it.
 	 */
 	if (prev->ghost.yield_task) {
+		//printk(KERN_INFO "producing messages yield task");
 		WARN_ON_ONCE(prev->ghost.blocked_task);
 		prev->ghost.yield_task = false;
 		ghost_task_yield(rq, prev);
-		ghost_wake_agent_of(prev);
+		//ghost_wake_agent_of(prev);
 		return false;
 	}
 
 	if (prev->ghost.blocked_task) {
+		//printk(KERN_INFO "producing messages blocked");
 		prev->ghost.blocked_task = false;
 		ghost_task_blocked(rq, prev);
-		ghost_wake_agent_of(prev);
+		//ghost_wake_agent_of(prev);
 		return false;
 	}
 
 	return true;
 }
 
-void ghost_latched_task_preempted(struct rq *rq)
-{
-	struct task_struct *latched = rq->ghost.latched_task;
+//void ghost_latched_task_preempted(struct rq *rq)
+//{
+//	struct task_struct *latched = rq->ghost.latched_task;
+//
+//	WARN_ON_ONCE(!rq->ghost.agent);
+//
+//	if (task_has_ghost_policy(latched)) {
+//		/*
+//		 * Normally, TASK_LATCHED is not sent until we context switch to
+//		 * the task.  The agent is expecting this message before
+//		 * TASK_PREEMPT.
+//		 */
+//		if (rq->ghost.run_flags & SEND_TASK_LATCHED) {
+//			task_deliver_msg_latched(rq, latched, true);
+//			rq->ghost.run_flags &= ~SEND_TASK_LATCHED;
+//		}
+//		_ghost_task_preempted(rq, latched, true);
+//		//ghost_wake_agent_of(latched);
+//	} else {
+//		/*
+//		 * Idle task was latched and agent must have made
+//		 * other arrangements to be notified that CPU is
+//		 * no longer idle (for e.g. NEED_CPU_NOT_IDLE).
+//		 */
+//		WARN_ON_ONCE(latched != rq->idle);
+//	}
+//	rq->ghost.latched_task = NULL;
+//}
 
-	WARN_ON_ONCE(!rq->ghost.agent);
+//static inline void ghost_update_boost_prio(struct task_struct *p,
+//					   bool preempted)
+//{
+//	//if (preempted)
+//	//	ghost_sw_set_flag(p->ghost.status_word, GHOST_SW_BOOST_PRIO);
+//	//else
+//	//	ghost_sw_clear_flag(p->ghost.status_word, GHOST_SW_BOOST_PRIO);
+//}
 
-	if (task_has_ghost_policy(latched)) {
-		/*
-		 * Normally, TASK_LATCHED is not sent until we context switch to
-		 * the task.  The agent is expecting this message before
-		 * TASK_PREEMPT.
-		 */
-		if (rq->ghost.run_flags & SEND_TASK_LATCHED) {
-			task_deliver_msg_latched(rq, latched, true);
-			rq->ghost.run_flags &= ~SEND_TASK_LATCHED;
-		}
-		_ghost_task_preempted(rq, latched, true);
-		ghost_wake_agent_of(latched);
-	} else {
-		/*
-		 * Idle task was latched and agent must have made
-		 * other arrangements to be notified that CPU is
-		 * no longer idle (for e.g. NEED_CPU_NOT_IDLE).
-		 */
-		WARN_ON_ONCE(latched != rq->idle);
-	}
-	rq->ghost.latched_task = NULL;
-}
-
-static inline void ghost_update_boost_prio(struct task_struct *p,
-					   bool preempted)
-{
-	//if (preempted)
-	//	ghost_sw_set_flag(p->ghost.status_word, GHOST_SW_BOOST_PRIO);
-	//else
-	//	ghost_sw_clear_flag(p->ghost.status_word, GHOST_SW_BOOST_PRIO);
-}
-
-static struct task_struct *pick_next_ghost_agent(struct rq *rq)
-{
-	struct task_struct *agent = rq->ghost.agent;
-	struct task_struct *next = NULL;
-	int nr_running;
-	bool preempted;
-	struct task_struct *prev = rq->curr;
-
-	if (!agent || !agent->on_rq)
-		goto done;
-
-	/*
-	 * Evaluate after produce_prev_msgs() in case it wakes up the local
-	 * agent.
-	 */
-	//next = pick_agent(rq);
-
-	/*
-	 * 'preempted' is true if a higher priority sched_class (e.g. CFS)
-	 * has runnable tasks. We use it as follows:
-	 *
-	 * 1. indicate via GHOST_SW_BOOST_PRIO that the agent must yield
-	 *    the CPU asap.
-	 *
-	 * 2. produce a TASK_PREEMPTED msg on behalf of 'prev' (note that the
-	 *    TASK_PREEMPTED msg could trigger a local agent wakeup; producing
-	 *    the msg here as opposed to after pick_next_task() allows us to
-	 *    eliminate one redundant context switch from 'ghost->CFS->agent'
-	 *    to 'ghost->agent'.
-	 */
-	nr_running = rq->nr_running;
-	WARN_ON_ONCE(nr_running < rq->ghost.ghost_nr_running);
-	preempted = (nr_running > rq->ghost.ghost_nr_running);
-
-	/* Preempted by local agent or another sched_class. */
-	if (next || preempted) {
-		/*
-		 * Even though 'preempted' may be set, the task may have blocked
-		 * or yielded.  check_prev_preemption tells us if this is an
-		 * actual preemption: the task did not stop voluntarily.
-		 */
-		if (rq->ghost.check_prev_preemption) {
-			/*
-			 * Paranoia: force_offcpu guarantees that 'prev' does
-			 * not stay oncpu after producing TASK_PREEMPTED(prev).
-			 */
-			ghost_task_preempted(rq, prev);
-			//ghost_wake_agent_of(prev);
-			force_offcpu(rq, false);
-			rq->ghost.check_prev_preemption = false;
-		}
-
-		/*
-		 * CPU is switching to a non-ghost task while a task is latched.
-		 *
-		 * Treat this like latched_task preemption because we don't know
-		 * when the CPU will be available again so no point in keeping
-		 * it latched.
-		 *
-		 * If the DEFER_LATCHED_PREEMPTION_BY_AGENT run flag is set, we
-		 * will defer preemption by the agent to the next tick. This
-		 * helps to avoid spurious preemption due to the agent being
-		 * runnable, while still bounding the time a latched task could
-		 * face a scheduling blackout.
-		 */
-		if (rq->ghost.latched_task && (preempted ||
-		    !(rq->ghost.run_flags & DEFER_LATCHED_PREEMPTION_BY_AGENT))) {
-			ghost_latched_task_preempted(rq);
-		}
-
-		/* did the preemption msg wake up the local agent? */
-		//if (!next)
-		//	next = pick_agent(rq);
-	 }
-
-	if (!next)
-		goto done;
-
-	ghost_update_boost_prio(next, preempted);
-	ghost_prepare_switch(rq, prev, next);
-
-done:
-	return next;
-}
+//static struct task_struct *pick_next_ghost_agent(struct rq *rq)
+//{
+//	struct task_struct *agent = rq->ghost.agent;
+//	struct task_struct *next = NULL;
+//	int nr_running;
+//	bool preempted;
+//	struct task_struct *prev = rq->curr;
+//
+//	if (!agent || !agent->on_rq)
+//		goto done;
+//
+//	/*
+//	 * Evaluate after produce_prev_msgs() in case it wakes up the local
+//	 * agent.
+//	 */
+//	//next = pick_agent(rq);
+//
+//	/*
+//	 * 'preempted' is true if a higher priority sched_class (e.g. CFS)
+//	 * has runnable tasks. We use it as follows:
+//	 *
+//	 * 1. indicate via GHOST_SW_BOOST_PRIO that the agent must yield
+//	 *    the CPU asap.
+//	 *
+//	 * 2. produce a TASK_PREEMPTED msg on behalf of 'prev' (note that the
+//	 *    TASK_PREEMPTED msg could trigger a local agent wakeup; producing
+//	 *    the msg here as opposed to after pick_next_task() allows us to
+//	 *    eliminate one redundant context switch from 'ghost->CFS->agent'
+//	 *    to 'ghost->agent'.
+//	 */
+//	nr_running = rq->nr_running;
+//	WARN_ON_ONCE(nr_running < rq->ghost.ghost_nr_running);
+//	preempted = (nr_running > rq->ghost.ghost_nr_running);
+//
+//	/* Preempted by local agent or another sched_class. */
+//	if (next || preempted) {
+//		/*
+//		 * Even though 'preempted' may be set, the task may have blocked
+//		 * or yielded.  check_prev_preemption tells us if this is an
+//		 * actual preemption: the task did not stop voluntarily.
+//		 */
+//		if (rq->ghost.check_prev_preemption) {
+//			/*
+//			 * Paranoia: force_offcpu guarantees that 'prev' does
+//			 * not stay oncpu after producing TASK_PREEMPTED(prev).
+//			 */
+//			ghost_task_preempted(rq, prev);
+//			//ghost_wake_agent_of(prev);
+//			force_offcpu(rq, false);
+//			rq->ghost.check_prev_preemption = false;
+//		}
+//
+//		/*
+//		 * CPU is switching to a non-ghost task while a task is latched.
+//		 *
+//		 * Treat this like latched_task preemption because we don't know
+//		 * when the CPU will be available again so no point in keeping
+//		 * it latched.
+//		 *
+//		 * If the DEFER_LATCHED_PREEMPTION_BY_AGENT run flag is set, we
+//		 * will defer preemption by the agent to the next tick. This
+//		 * helps to avoid spurious preemption due to the agent being
+//		 * runnable, while still bounding the time a latched task could
+//		 * face a scheduling blackout.
+//		 */
+//		if (rq->ghost.latched_task && (preempted ||
+//		    !(rq->ghost.run_flags & DEFER_LATCHED_PREEMPTION_BY_AGENT))) {
+//			//ghost_latched_task_preempted(rq);
+//		}
+//
+//		/* did the preemption msg wake up the local agent? */
+//		//if (!next)
+//		//	next = pick_agent(rq);
+//	 }
+//
+//	if (!next)
+//		goto done;
+//
+//	//ghost_update_boost_prio(next, preempted);
+//	ghost_prepare_switch(rq, prev, next);
+//
+//done:
+//	return next;
+//}
 
 static struct task_struct *pick_next_task_ghost(struct rq *rq)
 {
@@ -1418,45 +1420,45 @@ static struct task_struct *pick_next_task_ghost(struct rq *rq)
 	//if (!agent || !agent->on_rq)
 	//	return NULL;
 
-	if (rq->ghost.latched_task) {
-		uint32_t barrier;
+	//if (rq->ghost.latched_task) {
+	//	uint32_t barrier;
 
-		next = rq->ghost.latched_task;
-		rq->ghost.latched_task = NULL;
+	//	next = rq->ghost.latched_task;
+	//	rq->ghost.latched_task = NULL;
 
-		WARN_ON_ONCE(rq->curr == next);
-		VM_BUG_ON(task_rq(next) != rq);
+	//	WARN_ON_ONCE(rq->curr == next);
+	//	VM_BUG_ON(task_rq(next) != rq);
 
-		if (next == rq->idle) {
-			/*
-			 * N.B. even though 'next' is the idle task this CPU
-			 * is not "idle" (presumably the sibling is running
-			 * a vcpu as part of a sync-group commit). Therefore
-			 * we return 'rq->idle' directly as opposed to via
-			 * pick_next_task_idle() and its side-effects.
-			 */
-			put_prev_task(rq, prev);
-			return rq->idle;
-		}
+	//	if (next == rq->idle) {
+	//		/*
+	//		 * N.B. even though 'next' is the idle task this CPU
+	//		 * is not "idle" (presumably the sibling is running
+	//		 * a vcpu as part of a sync-group commit). Therefore
+	//		 * we return 'rq->idle' directly as opposed to via
+	//		 * pick_next_task_idle() and its side-effects.
+	//		 */
+	//		put_prev_task(rq, prev);
+	//		return rq->idle;
+	//	}
 
-		/* Suppress barrier check in validate_next_task(). */
-		barrier = task_barrier_get(next);
-		if (validate_next_task(rq, next, barrier, NULL) ||
-		    validate_next_offcpu(rq, next, NULL)) {
-			/*
-			 * Welp! A previously latched and validated
-			 * task is now failing checks. Let the local
-			 * agent figure out what to do.
-			 */
-			pr_warn("ghost: likely leaking task %d", next->pid);
-			next = agent;
-			rq->ghost.blocked_in_run = false;
-		} else {
-			if (unlikely(rq->ghost.run_flags & NEED_L1D_FLUSH))
-				kvm_register_core_conflict(cpu_of(rq));
-		}
-		goto done;
-	}
+	//	/* Suppress barrier check in validate_next_task(). */
+	//	barrier = task_barrier_get(next);
+	//	if (validate_next_task(rq, next, barrier, NULL) ||
+	//	    validate_next_offcpu(rq, next, NULL)) {
+	//		/*
+	//		 * Welp! A previously latched and validated
+	//		 * task is now failing checks. Let the local
+	//		 * agent figure out what to do.
+	//		 */
+	//		pr_warn("ghost: likely leaking task %d", next->pid);
+	//		next = agent;
+	//		rq->ghost.blocked_in_run = false;
+	//	} else {
+	//		if (unlikely(rq->ghost.run_flags & NEED_L1D_FLUSH))
+	//			kvm_register_core_conflict(cpu_of(rq));
+	//	}
+	//	goto done;
+	//}
 
 	//rcu_read_lock();
 	// TODO: call into our code to pick next task
@@ -1516,10 +1518,10 @@ static struct task_struct *pick_next_task_ghost(struct rq *rq)
 	}
 
 done:
-	if (unlikely(!next && rq->ghost.run_flags & RTLA_ON_IDLE)) {
-		rq->ghost.blocked_in_run = false;
-		return pick_next_ghost_agent(rq);
-	}
+	//if (unlikely(!next && rq->ghost.run_flags & RTLA_ON_IDLE)) {
+	//	rq->ghost.blocked_in_run = false;
+	//	return pick_next_ghost_agent(rq);
+	//}
 
 	ghost_prepare_switch(rq, prev, next);
 	rq->ghost.must_resched = false;
@@ -1652,11 +1654,10 @@ static void task_woken_ghost(struct rq *rq, struct task_struct *p)
 	if (unlikely(p->ghost.new_task)) {
 		p->ghost.new_task = false;
 		ghost_task_new(rq, p);
-		goto done;
+		return;
 	}
 	task_deliver_msg_wakeup(rq, p);
-done:
-	ghost_wake_agent_of(p);
+	//ghost_wake_agent_of(p);
 }
 
 DEFINE_SCHED_CLASS(ghost) = {
@@ -1693,12 +1694,12 @@ static int balance_agent(struct rq *rq, struct task_struct *prev,
  * to lose its CPU to another sched class. This allows the agent to transition
  * to another CPU before giving up its CPU.
  */
-DEFINE_SCHED_CLASS(ghost_agent) = {
-	.pick_next_task		= pick_next_ghost_agent,
-#ifdef CONFIG_SMP
-	.balance		= balance_agent,
-#endif
-};
+//DEFINE_SCHED_CLASS(ghost_agent) = {
+//	.pick_next_task		= pick_next_ghost_agent,
+//#ifdef CONFIG_SMP
+//	.balance		= balance_agent,
+//#endif
+//};
 
 /*
  * Migrate 'next' (if necessary) in preparation to run it on 'cpu'.
@@ -1732,8 +1733,8 @@ static struct rq *ghost_move_task(struct rq *rq, struct task_struct *next,
 		VM_BUG_ON(!task_on_rq_queued(next));
 		update_rq_clock(rq);
 		rq = move_queued_task(rq, rf, next, cpu);
-	} else {
-		invalidate_cached_tasks(rq, next);
+	//} else {
+		//invalidate_cached_tasks(rq, next);
 	}
 
 	return rq;
@@ -1873,27 +1874,27 @@ struct queue_notifier {
  */
 static void __queue_free_work(struct work_struct *work)
 {
-	struct ghost_queue *q = container_of(work, struct ghost_queue,
-					     free_work);
-	vfree(q->addr);
-	kfree(q->notifier);
-	kfree(q);
+	//struct ghost_queue *q = container_of(work, struct ghost_queue,
+	//				     free_work);
+	//vfree(q->addr);
+	//kfree(q->notifier);
+	//kfree(q);
 }
 
 void _queue_free_rcu_callback(struct rcu_head *rhp)
 {
-	struct ghost_queue *q = container_of(rhp, struct ghost_queue, rcu);
+	//struct ghost_queue *q = container_of(rhp, struct ghost_queue, rcu);
 
 	/*
 	 * Further defer work to a preemptible process context: the rcu
 	 * callback may be called from a softirq context and cannot block.
 	 */
-	schedule_work(&q->free_work);
+	//schedule_work(&q->free_work);
 }
 
 static void __queue_kref_release(struct kref *k)
 {
-	struct ghost_queue *q = container_of(k, struct ghost_queue, kref);
+	//struct ghost_queue *q = container_of(k, struct ghost_queue, kref);
 
 	/*
 	 * We may be called from awkward contexts that hold scheduler
@@ -1903,18 +1904,18 @@ static void __queue_kref_release(struct kref *k)
 	 * Defer freeing of queue memory to an rcu callback (this has
 	 * nothing to do with rcu and we use it solely for convenience).
 	 */
-	call_rcu(&q->rcu, _queue_free_rcu_callback);
+	//call_rcu(&q->rcu, _queue_free_rcu_callback);
 }
 
-static inline void queue_decref(struct ghost_queue *q)
-{
-	kref_put(&q->kref, __queue_kref_release);
-}
-
-static inline void queue_incref(struct ghost_queue *q)
-{
-	kref_get(&q->kref);
-}
+//static inline void queue_decref(struct ghost_queue *q)
+//{
+//	//kref_put(&q->kref, __queue_kref_release);
+//}
+//
+//static inline void queue_incref(struct ghost_queue *q)
+//{
+//	//kref_get(&q->kref);
+//}
 
 /* Hold e->lock and the cpu_rsvp lock */
 //static void __enclave_add_cpu(struct ghost_enclave *e, int cpu)
@@ -2368,15 +2369,15 @@ void __init init_sched_ghost_class(void)
 //	fdput(*fd_to_put);
 //}
 
-struct ghost_queue *fd_to_queue(struct fd f)
-{
-	if (!f.file)
-		return NULL;
-	if (f.file->f_op != &queue_fops)
-		return NULL;
-	return f.file->private_data;
-}
-EXPORT_SYMBOL(fd_to_queue);
+//struct ghost_queue *fd_to_queue(struct fd f)
+//{
+//	if (!f.file)
+//		return NULL;
+//	if (f.file->f_op != &queue_fops)
+//		return NULL;
+//	return f.file->private_data;
+//}
+//EXPORT_SYMBOL(fd_to_queue);
 
 //static void enclave_add_task(struct ghost_enclave *e, struct task_struct *p)
 //{
@@ -2593,7 +2594,7 @@ static int __ghost_prep_task(struct task_struct *p,
 	int error = 0;
 
 	//WARN_ON_ONCE(p->ghost.status_word);
-	WARN_ON_ONCE(p->ghost.dst_q);
+	//WARN_ON_ONCE(p->ghost.dst_q);
 	//WARN_ON_ONCE(p->ghost.enclave);
 
 	//lockdep_assert_held(&e->lock);
@@ -2674,10 +2675,10 @@ static int __ghost_prep_task(struct task_struct *p,
 	//}
 done:
 	if (error) {
-		if (p->ghost.dst_q) {
-			queue_decref(p->ghost.dst_q);
-			p->ghost.dst_q = NULL;
-		}
+		//if (p->ghost.dst_q) {
+		//	queue_decref(p->ghost.dst_q);
+		//	p->ghost.dst_q = NULL;
+		//}
 
 		//if (p->ghost.status_word) {
 		//	free_status_word_locked(e, p->ghost.status_word);
@@ -2752,7 +2753,7 @@ static void ghost_uninhibit_task_msgs(struct task_struct *p)
 			} else {
 				const bool runnable = task_on_rq_queued(p);
 				task_deliver_msg_task_new(rq, p, runnable);
-				ghost_wake_agent_of(p);
+				//ghost_wake_agent_of(p);
 			}
 		} else {
 			/*
@@ -3042,7 +3043,7 @@ int ghost_sched_fork(struct task_struct *p)
 
 void ghost_sched_cleanup_fork(struct task_struct *p)
 {
-	struct ghost_queue *q;
+	//struct ghost_queue *q;
 	//struct ghost_status_word *sw;
 	//struct ghost_enclave *e = p->ghost.enclave;
 	ulong flags;
@@ -3053,11 +3054,11 @@ void ghost_sched_cleanup_fork(struct task_struct *p)
 	/*
 	 * Clear association between 'p' and the default queue.
 	 */
-	q = p->ghost.dst_q;
-	if (q != NULL) {
-		p->ghost.dst_q = NULL;
-		queue_decref(q);
-	}
+	//q = p->ghost.dst_q;
+	//if (q != NULL) {
+	//	p->ghost.dst_q = NULL;
+	//	queue_decref(q);
+	//}
 
 	//sw = p->ghost.status_word;
 	//if (sw != NULL) {
@@ -3242,126 +3243,126 @@ bool ghost_agent(const struct sched_attr *attr)
 //	spin_unlock_irqrestore(&e->lock, irq_fl);
 //}
 
-static int queue_mmap(struct file *file, struct vm_area_struct *vma)
-{
-	struct ghost_queue *q = file->private_data;
-
-	return ghost_region_mmap(file, vma, q->addr, q->mapsize);
-}
-
-static int queue_release(struct inode *inode, struct file *file)
-{
-	struct ghost_queue *q = file->private_data;
-	//struct ghost_enclave *e = q->enclave;
-
-	//enclave_maybe_del_default_queue(e, q);
-	//q->enclave = NULL;
-	//kref_put(&e->kref, enclave_release);
-	queue_decref(q);		/* drop inode reference */
-	return 0;
-}
-
-static const struct file_operations queue_fops = {
-	.release		= queue_release,
-	.mmap			= queue_mmap,
-};
+//static int queue_mmap(struct file *file, struct vm_area_struct *vma)
+//{
+//	struct ghost_queue *q = file->private_data;
+//
+//	return ghost_region_mmap(file, vma, q->addr, q->mapsize);
+//}
+//
+//static int queue_release(struct inode *inode, struct file *file)
+//{
+//	struct ghost_queue *q = file->private_data;
+//	//struct ghost_enclave *e = q->enclave;
+//
+//	//enclave_maybe_del_default_queue(e, q);
+//	//q->enclave = NULL;
+//	//kref_put(&e->kref, enclave_release);
+//	queue_decref(q);		/* drop inode reference */
+//	return 0;
+//}
+//
+//static const struct file_operations queue_fops = {
+//	.release		= queue_release,
+//	.mmap			= queue_mmap,
+//};
 
 //int ghost_create_queue(struct ghost_enclave *e,
-int ghost_create_queue(
-		       struct ghost_ioc_create_queue __user *arg)
-{
-	ulong size;
-	int error = 0, fd, elems, node, flags;
-	struct ghost_queue *q;
-	struct ghost_queue_header *h;
-	struct ghost_ioc_create_queue create_queue;
-
-	const int valid_flags = 0;	/* no flags for now */
-
-	if (copy_from_user(&create_queue, arg,
-			   sizeof(struct ghost_ioc_create_queue)))
-		return -EFAULT;
-
-	elems = create_queue.elems;
-	node = create_queue.node;
-	flags = create_queue.flags;
-
-	/*
-	 * Validate that 'head' and 'tail' are large enough to distinguish
-	 * between an empty and full queue. In other words when the queue
-	 * goes from empty to full we want to guarantee that 'head' will
-	 * not rollover 'tail'.
-	 */
-	BUILD_BUG_ON(
-		GHOST_MAX_QUEUE_ELEMS >=
-		    ((typeof(((struct ghost_ring *)0)->head))~0UL)
-	);
-
-	if (elems < 0 || elems > GHOST_MAX_QUEUE_ELEMS || !is_power_of_2(elems))
-		return -EINVAL;
-
-	if (flags & ~valid_flags)
-		return -EINVAL;
-
-	if (node < 0 || node >= nr_node_ids || !node_online(node))
-		return -EINVAL;
-
-	size = sizeof(struct ghost_queue_header) + sizeof(struct ghost_ring);
-	size += elems * sizeof(struct ghost_msg);
-	size = PAGE_ALIGN(size);
-
-	error = put_user(size, &arg->mapsize);
-	if (error)
-		return error;
-
-	q = kzalloc_node(sizeof(struct ghost_queue), GFP_KERNEL, node);
-	if (!q) {
-		error = -ENOMEM;
-		return error;
-	}
-
-	spin_lock_init(&q->lock);
-	kref_init(&q->kref); /* sets to 1; inode gets its own reference */
-	q->addr = vmalloc_user_node_flags(size, node, GFP_KERNEL);
-	if (!q->addr) {
-		error = -ENOMEM;
-		goto err_vmalloc;
-	}
-
-	h = q->addr;
-	h->version = GHOST_QUEUE_VERSION;
-	h->start = sizeof(struct ghost_queue_header);
-	h->nelems = elems;
-
-	/*
-	 * The queue mapping is writeable so we cannot trust anything
-	 * in the header after it is mapped by the agent.
-	 *
-	 * Stash a pointer to the ring and number of elements below.
-	 */
-	q->ring = (struct ghost_ring *)((char *)h + h->start);
-	q->nelems = h->nelems;
-	q->mapsize = size;
-
-	fd = anon_inode_getfd("[ghost_queue]", &queue_fops, q,
-			      O_RDWR | O_CLOEXEC);
-	if (fd < 0) {
-		error = fd;
-		goto err_getfd;
-	}
-
-	//kref_get(&e->kref);
-	//q->enclave = e;
-	INIT_WORK(&q->free_work, __queue_free_work);
-
-	return fd;
-
-err_getfd:
-	vfree(q->addr);
-err_vmalloc:
-	kfree(q);
-	return error;
-}
+//int ghost_create_queue(
+//		       struct ghost_ioc_create_queue __user *arg)
+//{
+//	ulong size;
+//	int error = 0, fd, elems, node, flags;
+//	struct ghost_queue *q;
+//	struct ghost_queue_header *h;
+//	struct ghost_ioc_create_queue create_queue;
+//
+//	const int valid_flags = 0;	/* no flags for now */
+//
+//	if (copy_from_user(&create_queue, arg,
+//			   sizeof(struct ghost_ioc_create_queue)))
+//		return -EFAULT;
+//
+//	elems = create_queue.elems;
+//	node = create_queue.node;
+//	flags = create_queue.flags;
+//
+//	/*
+//	 * Validate that 'head' and 'tail' are large enough to distinguish
+//	 * between an empty and full queue. In other words when the queue
+//	 * goes from empty to full we want to guarantee that 'head' will
+//	 * not rollover 'tail'.
+//	 */
+//	BUILD_BUG_ON(
+//		GHOST_MAX_QUEUE_ELEMS >=
+//		    ((typeof(((struct ghost_ring *)0)->head))~0UL)
+//	);
+//
+//	if (elems < 0 || elems > GHOST_MAX_QUEUE_ELEMS || !is_power_of_2(elems))
+//		return -EINVAL;
+//
+//	if (flags & ~valid_flags)
+//		return -EINVAL;
+//
+//	if (node < 0 || node >= nr_node_ids || !node_online(node))
+//		return -EINVAL;
+//
+//	size = sizeof(struct ghost_queue_header) + sizeof(struct ghost_ring);
+//	size += elems * sizeof(struct ghost_msg);
+//	size = PAGE_ALIGN(size);
+//
+//	error = put_user(size, &arg->mapsize);
+//	if (error)
+//		return error;
+//
+//	q = kzalloc_node(sizeof(struct ghost_queue), GFP_KERNEL, node);
+//	if (!q) {
+//		error = -ENOMEM;
+//		return error;
+//	}
+//
+//	spin_lock_init(&q->lock);
+//	kref_init(&q->kref); /* sets to 1; inode gets its own reference */
+//	q->addr = vmalloc_user_node_flags(size, node, GFP_KERNEL);
+//	if (!q->addr) {
+//		error = -ENOMEM;
+//		goto err_vmalloc;
+//	}
+//
+//	h = q->addr;
+//	h->version = GHOST_QUEUE_VERSION;
+//	h->start = sizeof(struct ghost_queue_header);
+//	h->nelems = elems;
+//
+//	/*
+//	 * The queue mapping is writeable so we cannot trust anything
+//	 * in the header after it is mapped by the agent.
+//	 *
+//	 * Stash a pointer to the ring and number of elements below.
+//	 */
+//	q->ring = (struct ghost_ring *)((char *)h + h->start);
+//	q->nelems = h->nelems;
+//	q->mapsize = size;
+//
+//	fd = anon_inode_getfd("[ghost_queue]", &queue_fops, q,
+//			      O_RDWR | O_CLOEXEC);
+//	if (fd < 0) {
+//		error = fd;
+//		goto err_getfd;
+//	}
+//
+//	//kref_get(&e->kref);
+//	//q->enclave = e;
+//	INIT_WORK(&q->free_work, __queue_free_work);
+//
+//	return fd;
+//
+//err_getfd:
+//	vfree(q->addr);
+//err_vmalloc:
+//	kfree(q);
+//	return error;
+//}
 
 //void ghost_queue_register_process_func(struct ghost_queue *q,
 //				       int (*func)(int type, int msglen,
@@ -3562,125 +3563,125 @@ static struct task_struct *find_task_by_gtid(gtid_t gtid)
 //	return error;
 //}
 
-int ghost_associate_queue(struct ghost_ioc_assoc_queue __user *arg)
-{
-	int error = 0;
-	struct rq *rq;
-	struct file *file;
-	struct rq_flags rf;
-	struct ghost_msg_src src;
-	struct task_struct *p = NULL;
-	//struct ghost_status_word *sw;
-	struct ghost_queue *oldq, *newq;
-	int status = 0;
-
-	int fd, barrier, flags;
-	struct ghost_ioc_assoc_queue assoc_queue;
-
-	if (copy_from_user(&assoc_queue, arg,
-			   sizeof(struct ghost_ioc_assoc_queue)))
-		return -EFAULT;
-
-	fd = assoc_queue.fd;
-	barrier = assoc_queue.barrier;
-	flags = assoc_queue.flags;
-	src = assoc_queue.src;
-
-	if (flags != 0)			/* no flags for now */
-		return -EINVAL;
-
-	/* For now only allow changing task-to-queue association. */
-	if (src.type != GHOST_TASK)
-		return -EINVAL;
-
-	file = fget(fd);
-	if (!file)
-		return -EBADF;
-
-	if (file->f_op != &queue_fops) {
-		error = -EBADF;
-		goto done;
-	}
-
-	newq = file->private_data;
-
-	rcu_read_lock();
-	p = find_task_by_gtid(src.arg);
-	if (!p) {
-		rcu_read_unlock();
-		error = -ENOENT;
-		goto done;
-	}
-
-	/* Serialize with sched_setscheduler(), clone() and exit() */
-	rq = task_rq_lock(p, &rf);
-	rcu_read_unlock();
-
-	oldq = p->ghost.dst_q;
-	//sw = p->ghost.status_word;
-	//if (unlikely(!sw)) {
-	//	/* Task is dead or switched to another sched_class */
-	//	WARN_ON_ONCE(p->state != TASK_DEAD &&
-	//		     ghost_class(p->sched_class));
-	//	error = -ENOENT;
-	//	goto done;
-	//}
-
-	if (barrier_get(p) != barrier) {
-		error = -ESTALE;
-		goto done;
-	}
-
-	/*
-	 * Associating to the preexisting queue would be a noop, but telling
-	 * userspace helps with in-place upgrade.  In particular, the agent
-	 * knows whether or not it may have received messages for a task that
-	 * joined the enclave after the agent set its default queue.
-	 */
-	if (oldq == newq)
-		status |= GHOST_ASSOC_SF_ALREADY;
-	/*
-	 * If a running task was setsched into ghost by a third party, and it
-	 * hasn't blocked or been preempted yet, then its TASK_NEW has not been
-	 * sent.  That task may or may not have an assigned queue, so this is
-	 * different than detecting oldq == newq.
-	 */
-	if (p->ghost.new_task)
-		status |= GHOST_ASSOC_SF_BRAND_NEW;
-
-	/*
-	 * All task msgs may be inhibited (including TASK_NEW) because the
-	 * agent hasn't finished handling TASK_DEPARTED from the previous
-	 * incarnation. This is similar to 'p->ghost.new_task' check above
-	 * in that TASK_NEW will be produced when the status_word from the
-	 * earlier incarnation is freed.
-	 */
-	if (p->inhibit_task_msgs) {
-		/*
-		 * The status_word associated with the previous incarnation
-		 * of the task is orphaned (it cannot be reached from any
-		 * task struct) so we should never see the GATED flag in
-		 * any "live" status_word.
-		 */
-		//WARN_ON_ONCE(sw->flags & GHOST_SW_TASK_MSG_GATED);
-		status |= GHOST_ASSOC_SF_BRAND_NEW;
-	}
-
-	queue_incref(newq);
-	p->ghost.dst_q = newq;
-	if (oldq)
-		queue_decref(oldq);
-
-done:
-	if (p)
-		task_rq_unlock(rq, p, &rf);
-	fput(file);
-	/* TODO(b/202070945) */
-	if (!error)
-		error = put_user(status, &arg->status);
-
-	return error;
-}
+//int ghost_associate_queue(struct ghost_ioc_assoc_queue __user *arg)
+//{
+//	int error = 0;
+//	struct rq *rq;
+//	struct file *file;
+//	struct rq_flags rf;
+//	struct ghost_msg_src src;
+//	struct task_struct *p = NULL;
+//	//struct ghost_status_word *sw;
+//	struct ghost_queue *oldq, *newq;
+//	int status = 0;
+//
+//	int fd, barrier, flags;
+//	struct ghost_ioc_assoc_queue assoc_queue;
+//
+//	if (copy_from_user(&assoc_queue, arg,
+//			   sizeof(struct ghost_ioc_assoc_queue)))
+//		return -EFAULT;
+//
+//	fd = assoc_queue.fd;
+//	barrier = assoc_queue.barrier;
+//	flags = assoc_queue.flags;
+//	src = assoc_queue.src;
+//
+//	if (flags != 0)			/* no flags for now */
+//		return -EINVAL;
+//
+//	/* For now only allow changing task-to-queue association. */
+//	if (src.type != GHOST_TASK)
+//		return -EINVAL;
+//
+//	file = fget(fd);
+//	if (!file)
+//		return -EBADF;
+//
+//	if (file->f_op != &queue_fops) {
+//		error = -EBADF;
+//		goto done;
+//	}
+//
+//	newq = file->private_data;
+//
+//	rcu_read_lock();
+//	p = find_task_by_gtid(src.arg);
+//	if (!p) {
+//		rcu_read_unlock();
+//		error = -ENOENT;
+//		goto done;
+//	}
+//
+//	/* Serialize with sched_setscheduler(), clone() and exit() */
+//	rq = task_rq_lock(p, &rf);
+//	rcu_read_unlock();
+//
+//	oldq = p->ghost.dst_q;
+//	//sw = p->ghost.status_word;
+//	//if (unlikely(!sw)) {
+//	//	/* Task is dead or switched to another sched_class */
+//	//	WARN_ON_ONCE(p->state != TASK_DEAD &&
+//	//		     ghost_class(p->sched_class));
+//	//	error = -ENOENT;
+//	//	goto done;
+//	//}
+//
+//	if (barrier_get(p) != barrier) {
+//		error = -ESTALE;
+//		goto done;
+//	}
+//
+//	/*
+//	 * Associating to the preexisting queue would be a noop, but telling
+//	 * userspace helps with in-place upgrade.  In particular, the agent
+//	 * knows whether or not it may have received messages for a task that
+//	 * joined the enclave after the agent set its default queue.
+//	 */
+//	if (oldq == newq)
+//		status |= GHOST_ASSOC_SF_ALREADY;
+//	/*
+//	 * If a running task was setsched into ghost by a third party, and it
+//	 * hasn't blocked or been preempted yet, then its TASK_NEW has not been
+//	 * sent.  That task may or may not have an assigned queue, so this is
+//	 * different than detecting oldq == newq.
+//	 */
+//	if (p->ghost.new_task)
+//		status |= GHOST_ASSOC_SF_BRAND_NEW;
+//
+//	/*
+//	 * All task msgs may be inhibited (including TASK_NEW) because the
+//	 * agent hasn't finished handling TASK_DEPARTED from the previous
+//	 * incarnation. This is similar to 'p->ghost.new_task' check above
+//	 * in that TASK_NEW will be produced when the status_word from the
+//	 * earlier incarnation is freed.
+//	 */
+//	if (p->inhibit_task_msgs) {
+//		/*
+//		 * The status_word associated with the previous incarnation
+//		 * of the task is orphaned (it cannot be reached from any
+//		 * task struct) so we should never see the GATED flag in
+//		 * any "live" status_word.
+//		 */
+//		//WARN_ON_ONCE(sw->flags & GHOST_SW_TASK_MSG_GATED);
+//		status |= GHOST_ASSOC_SF_BRAND_NEW;
+//	}
+//
+//	queue_incref(newq);
+//	p->ghost.dst_q = newq;
+//	if (oldq)
+//		queue_decref(oldq);
+//
+//done:
+//	if (p)
+//		task_rq_unlock(rq, p, &rf);
+//	fput(file);
+//	/* TODO(b/202070945) */
+//	if (!error)
+//		error = put_user(status, &arg->status);
+//
+//	return error;
+//}
 
 //int ghost_set_default_queue(struct ghost_enclave *e,
 //			    struct ghost_ioc_set_default_queue __user *arg)
@@ -3731,146 +3732,146 @@ done:
  * Returns the CPU of the ghost agent to wakeup or -1 if an eligible
  * CPU is not found or configured.
  */
-static int target_cpu(struct ghost_queue *q, int preferred_cpu)
-{
-	struct queue_notifier *notifier;
-	int cpu = -1, i;
-
-	if (unlikely(!q))
-		return -1;
-
-	rcu_read_lock();
-	notifier = rcu_dereference(q->notifier);
-	if (notifier) {
-		VM_BUG_ON(notifier->wnum > GHOST_MAX_WINFO);
-		for (i = 0; i < notifier->wnum; i++) {
-			const int wakeup_cpu = notifier->winfo[i].cpu;
-
-			if (cpu < 0)
-				cpu = wakeup_cpu;
-
-			/*
-			 * If the preferred_cpu is one of the candidates then
-			 * choose it. This is so that task state change msgs
-			 * (e.g. TASK_BLOCKED) naturally wake the local agent.
-			 */
-			if (wakeup_cpu == preferred_cpu) {
-				cpu = preferred_cpu;
-				break;
-			}
-		}
-	}
-	rcu_read_unlock();
-	return cpu;
-}
-
-static int task_target_cpu(struct task_struct *p)
-{
-	struct rq *rq = task_rq(p);
-
-	/* 'p->ghost.dst_q' is protected by 'rq->lock' */
-	lockdep_assert_held(&rq->lock);
-
-	/*
-	 * It doesn't make sense to notify an agent about its own state change.
-	 */
-	if (unlikely(p->ghost.agent))
-		return -1;
-
-	return target_cpu(p->ghost.dst_q, task_cpu(p));
-}
-
-static int agent_target_cpu(struct rq *rq)
-{
-	struct task_struct *agent = rq->ghost.agent;
-
-	lockdep_assert_held(&rq->lock);
-	VM_BUG_ON(!is_agent(rq, agent));
-
-	return target_cpu(agent->ghost.dst_q, task_cpu(agent));
-}
-
-int ghost_config_queue_wakeup(struct ghost_ioc_config_queue_wakeup __user *arg)
-{
-	struct ghost_queue *q;
-	struct queue_notifier *old, *qn = NULL;
-	struct ghost_agent_wakeup wakeup[GHOST_MAX_WINFO];
-	struct file *f;
-	ulong fl;
-	int cpu = -1, i;
-	int ret = 0;
-
-	int qfd, ninfo, flags;
-	struct ghost_agent_wakeup *w;
-	struct ghost_ioc_config_queue_wakeup config_wakeup;
-
-	if (copy_from_user(&config_wakeup, arg,
-			   sizeof(struct ghost_ioc_config_queue_wakeup)))
-		return -EFAULT;
-
-	qfd = config_wakeup.qfd;
-	w = config_wakeup.w;
-	ninfo = config_wakeup.ninfo;
-	flags = config_wakeup.flags;
-
-	if (ninfo < 0 || ninfo > GHOST_MAX_WINFO)
-		return -EINVAL;
-
-	if (flags)
-		return -EINVAL;
-
-	f = fget(qfd);
-	if (!f)
-		return -EBADF;
-
-	if (f->f_op != &queue_fops) {
-		ret = -EBADF;
-		goto out_fput;
-	}
-
-	q = f->private_data;
-	if (!q) {
-		ret = -EINVAL;
-		goto out_fput;
-	}
-
-	if (ninfo) {
-		if (copy_from_user(&wakeup, w,
-				   sizeof(struct ghost_agent_wakeup) * ninfo)) {
-			ret = -EFAULT;
-			goto out_fput;
-		}
-
-		for (i = 0; i < ninfo; i++) {
-			/* cpu == -1 implies that it is polling for messages. */
-			cpu = wakeup[i].cpu;
-
-			if (wakeup[i].prio || (cpu < -1) ||
-			    (cpu >= nr_cpu_ids) || !cpu_online(cpu)) {
-				ret = -EINVAL;
-				goto out_fput;
-			}
-		}
-
-		qn = kzalloc(sizeof(struct queue_notifier), GFP_KERNEL);
-		memcpy(qn->winfo, wakeup, sizeof(qn->winfo));
-		qn->wnum = ninfo;
-	}
-
-	spin_lock_irqsave(&q->lock, fl);
-	old = rcu_dereference_protected(q->notifier, lockdep_is_held(&q->lock));
-	rcu_assign_pointer(q->notifier, qn);
-	spin_unlock_irqrestore(&q->lock, fl);
-
-	/* Wakeup agent on new CPU, in case 'q' has pending messages. */
-	ghost_wake_agent_on(cpu);
-
-	if (old)
-		kfree_rcu(old, rcu);
-out_fput:
-	fput(f);
-	return ret;
-}
+//static int target_cpu(struct ghost_queue *q, int preferred_cpu)
+//{
+//	struct queue_notifier *notifier;
+//	int cpu = -1, i;
+//
+//	if (unlikely(!q))
+//		return -1;
+//
+//	rcu_read_lock();
+//	notifier = rcu_dereference(q->notifier);
+//	if (notifier) {
+//		VM_BUG_ON(notifier->wnum > GHOST_MAX_WINFO);
+//		for (i = 0; i < notifier->wnum; i++) {
+//			const int wakeup_cpu = notifier->winfo[i].cpu;
+//
+//			if (cpu < 0)
+//				cpu = wakeup_cpu;
+//
+//			/*
+//			 * If the preferred_cpu is one of the candidates then
+//			 * choose it. This is so that task state change msgs
+//			 * (e.g. TASK_BLOCKED) naturally wake the local agent.
+//			 */
+//			if (wakeup_cpu == preferred_cpu) {
+//				cpu = preferred_cpu;
+//				break;
+//			}
+//		}
+//	}
+//	rcu_read_unlock();
+//	return cpu;
+//}
+//
+//static int task_target_cpu(struct task_struct *p)
+//{
+//	struct rq *rq = task_rq(p);
+//
+//	/* 'p->ghost.dst_q' is protected by 'rq->lock' */
+//	lockdep_assert_held(&rq->lock);
+//
+//	/*
+//	 * It doesn't make sense to notify an agent about its own state change.
+//	 */
+//	if (unlikely(p->ghost.agent))
+//		return -1;
+//
+//	return target_cpu(p->ghost.dst_q, task_cpu(p));
+//}
+//
+//static int agent_target_cpu(struct rq *rq)
+//{
+//	struct task_struct *agent = rq->ghost.agent;
+//
+//	lockdep_assert_held(&rq->lock);
+//	VM_BUG_ON(!is_agent(rq, agent));
+//
+//	return target_cpu(agent->ghost.dst_q, task_cpu(agent));
+//}
+//
+//int ghost_config_queue_wakeup(struct ghost_ioc_config_queue_wakeup __user *arg)
+//{
+//	struct ghost_queue *q;
+//	struct queue_notifier *old, *qn = NULL;
+//	struct ghost_agent_wakeup wakeup[GHOST_MAX_WINFO];
+//	struct file *f;
+//	ulong fl;
+//	int cpu = -1, i;
+//	int ret = 0;
+//
+//	int qfd, ninfo, flags;
+//	struct ghost_agent_wakeup *w;
+//	struct ghost_ioc_config_queue_wakeup config_wakeup;
+//
+//	if (copy_from_user(&config_wakeup, arg,
+//			   sizeof(struct ghost_ioc_config_queue_wakeup)))
+//		return -EFAULT;
+//
+//	qfd = config_wakeup.qfd;
+//	w = config_wakeup.w;
+//	ninfo = config_wakeup.ninfo;
+//	flags = config_wakeup.flags;
+//
+//	if (ninfo < 0 || ninfo > GHOST_MAX_WINFO)
+//		return -EINVAL;
+//
+//	if (flags)
+//		return -EINVAL;
+//
+//	f = fget(qfd);
+//	if (!f)
+//		return -EBADF;
+//
+//	if (f->f_op != &queue_fops) {
+//		ret = -EBADF;
+//		goto out_fput;
+//	}
+//
+//	q = f->private_data;
+//	if (!q) {
+//		ret = -EINVAL;
+//		goto out_fput;
+//	}
+//
+//	if (ninfo) {
+//		if (copy_from_user(&wakeup, w,
+//				   sizeof(struct ghost_agent_wakeup) * ninfo)) {
+//			ret = -EFAULT;
+//			goto out_fput;
+//		}
+//
+//		for (i = 0; i < ninfo; i++) {
+//			/* cpu == -1 implies that it is polling for messages. */
+//			cpu = wakeup[i].cpu;
+//
+//			if (wakeup[i].prio || (cpu < -1) ||
+//			    (cpu >= nr_cpu_ids) || !cpu_online(cpu)) {
+//				ret = -EINVAL;
+//				goto out_fput;
+//			}
+//		}
+//
+//		qn = kzalloc(sizeof(struct queue_notifier), GFP_KERNEL);
+//		memcpy(qn->winfo, wakeup, sizeof(qn->winfo));
+//		qn->wnum = ninfo;
+//	}
+//
+//	spin_lock_irqsave(&q->lock, fl);
+//	old = rcu_dereference_protected(q->notifier, lockdep_is_held(&q->lock));
+//	rcu_assign_pointer(q->notifier, qn);
+//	spin_unlock_irqrestore(&q->lock, fl);
+//
+//	/* Wakeup agent on new CPU, in case 'q' has pending messages. */
+//	ghost_wake_agent_on(cpu);
+//
+//	if (old)
+//		kfree_rcu(old, rcu);
+//out_fput:
+//	fput(f);
+//	return ret;
+//}
 
 int ghost_get_cpu_time(struct ghost_ioc_get_cpu_time __user *arg)
 {
@@ -4155,10 +4156,10 @@ static inline bool cpu_skip_message(struct rq *rq)
 	if (WARN_ON_ONCE(!agent))
 		return true;
 
-	if (WARN_ON_ONCE(!agent->ghost.dst_q))
+	//if (WARN_ON_ONCE(!agent->ghost.dst_q))
 		return true;
 
-	return false;
+	//return false;
 }
 
 static inline bool cpu_deliver_msg_tick(struct rq *rq, struct task_struct *p)
@@ -4571,7 +4572,7 @@ static void release_from_ghost(struct rq *rq, struct task_struct *p)
 	lockdep_assert_held(&rq->lock);
 	lockdep_assert_held(&p->pi_lock);
 
-	WARN_ON_ONCE(is_cached_task(rq, p));
+	//WARN_ON_ONCE(is_cached_task(rq, p));
 	WARN_ON_ONCE(p->ghost.new_task);
 
 	//spin_lock_irqsave(&e->lock, flags);
@@ -4664,8 +4665,8 @@ static void release_from_ghost(struct rq *rq, struct task_struct *p)
 		 * of invalidate_cached_tasks: preempt the committed task and
 		 * let the agent (if there is one) handle it.
 		 */
-		if (rq->ghost.latched_task)
-			ghost_latched_task_preempted(rq);
+		//if (rq->ghost.latched_task)
+			//ghost_latched_task_preempted(rq);
 		/* We don't allow agents to setsched away from ghost */
 		WARN_ON_ONCE(p->state != TASK_DEAD);
 		rq->ghost.agent = NULL;
@@ -4685,7 +4686,7 @@ static void release_from_ghost(struct rq *rq, struct task_struct *p)
 		 * spinning waiting for this transaction to return before it
 		 * gracefully exits.
 		 */
-		ghost_claim_and_kill_txn(rq->cpu, GHOST_TXN_NO_AGENT);
+		//ghost_claim_and_kill_txn(rq->cpu, GHOST_TXN_NO_AGENT);
 
 		/* See ghost_destroy_enclave() */
 		//if (rq->ghost.agent_remove_enclave_cpu) {
@@ -4708,10 +4709,10 @@ static void release_from_ghost(struct rq *rq, struct task_struct *p)
 	//ghost_wake_agent_of(p);
 
 	/* Release reference to 'dst_q' */
-	if (p->ghost.dst_q) {
-		queue_decref(p->ghost.dst_q);
-		p->ghost.dst_q = NULL;
-	}
+	//if (p->ghost.dst_q) {
+	//	queue_decref(p->ghost.dst_q);
+	//	p->ghost.dst_q = NULL;
+	//}
 }
 
 static void ghost_delayed_put_task_struct(struct rcu_head *rhp)
@@ -4784,7 +4785,7 @@ static void ghost_set_pnt_state(struct rq *rq, struct task_struct *p,
 		 * invalidate_cached_tasks(), which moves p from one cpu to
 		 * another.
 		 */
-		ghost_latched_task_preempted(rq);
+		//ghost_latched_task_preempted(rq);
 	}
 	rq->ghost.latched_task = p;
 	rq->ghost.must_resched = false;
@@ -4879,10 +4880,10 @@ int ghost_wake_agent_on_check(int cpu)
 	return ret;
 }
 
-void ghost_wake_agent_of(struct task_struct *p)
-{
-	ghost_wake_agent_on(task_target_cpu(p));
-}
+//void ghost_wake_agent_of(struct task_struct *p)
+//{
+//	ghost_wake_agent_on(task_target_cpu(p));
+//}
 
 static void _ghost_task_preempted(struct rq *rq, struct task_struct *p,
 				  bool was_latched)
@@ -5098,23 +5099,23 @@ static inline bool run_flags_valid(int run_flags, int valid_run_flags,
 	return true;
 }
 
-static inline bool commit_flags_valid(int commit_flags, int valid_commit_flags)
-{
-	if (commit_flags & ~valid_commit_flags)
-		return false;
-
-	/* Exactly one or none of the COMMIT_AT_XYZ flags must be set */
-	BUILD_BUG_ON(sizeof_field(struct ghost_txn, commit_flags) != 1);
-	if (hweight8(commit_flags & COMMIT_AT_FLAGS) > 1)
-		return false;
-
-	/* Cannot specify both elide barrier inc and inc on failure. */
-	if ((commit_flags & ELIDE_AGENT_BARRIER_INC) &&
-	    (commit_flags & INC_AGENT_BARRIER_ON_FAILURE))
-		return false;
-
-	return true;
-}
+//static inline bool commit_flags_valid(int commit_flags, int valid_commit_flags)
+//{
+//	if (commit_flags & ~valid_commit_flags)
+//		return false;
+//
+//	/* Exactly one or none of the COMMIT_AT_XYZ flags must be set */
+//	BUILD_BUG_ON(sizeof_field(struct ghost_txn, commit_flags) != 1);
+//	if (hweight8(commit_flags & COMMIT_AT_FLAGS) > 1)
+//		return false;
+//
+//	/* Cannot specify both elide barrier inc and inc on failure. */
+//	if ((commit_flags & ELIDE_AGENT_BARRIER_INC) &&
+//	    (commit_flags & INC_AGENT_BARRIER_ON_FAILURE))
+//		return false;
+//
+//	return true;
+//}
 
 /*
  * ghOSt API to yield local cpu or ping a remote cpu.
@@ -5364,1036 +5365,1036 @@ int ghost_run_gtid_on_check(gtid_t gtid, u32 task_barrier, int run_flags,
 	return __ghost_run_gtid_on(gtid, task_barrier, run_flags, cpu);
 }
 
-static inline bool _ghost_txn_ready(int cpu, int *commit_flags)
-{
-	struct ghost_txn *txn;
-	bool ready = false;
-
-	VM_BUG_ON(preemptible());
-	VM_BUG_ON(cpu < 0 || cpu >= nr_cpu_ids);
-
-	rcu_read_lock();
-	txn = rcu_dereference(per_cpu(ghost_txn, cpu));
-	if (txn) {
-		ready = smp_load_acquire(&txn->state) == GHOST_TXN_READY;
-		if (commit_flags != NULL)
-			*commit_flags = READ_ONCE(txn->commit_flags);
-	}
-	rcu_read_unlock();
-
-	return ready;
-}
-
-static inline bool ghost_txn_ready(int cpu)
-{
-	return _ghost_txn_ready(cpu, NULL);
-}
-
-static inline bool _ghost_txn_greedy(int commit_flags)
-{
-	return (commit_flags & COMMIT_AT_FLAGS) == 0;
-}
-
-static inline bool ghost_txn_greedy(int cpu)
-{
-	int flags;
-
-	return _ghost_txn_ready(cpu, &flags) && _ghost_txn_greedy(flags);
-}
-
-/*
- * Try to claim txn iff the point-of-commit matches what was requested
- * via 'commit_flags'. Note that 'commit_flags == 0' indicates a greedy
- * commit and matches all commit points.
- *
- * The only exception is when a commit is explicitly requested by
- * the agent via GHOST_COMMIT_TXN in which case 'txn->commit_flags'
- * is ignored (indicated by where = -1).
- *
- * Returns 'true' if txn was claimed and 'false' otherwise.
- */
-static inline bool ghost_claim_txn(int cpu, int where)
-{
-	struct ghost_txn *txn = rcu_dereference(per_cpu(ghost_txn, cpu));
-	int commit_flags;
-
-	VM_BUG_ON(preemptible());
-	VM_BUG_ON(cpu < 0 || cpu >= nr_cpu_ids);
-
-	/*
-	 * Ensure that COMMIT_AT_XYZ flag is never a negative value so
-	 * that a commit explicitly requested by the agent can be safely
-	 * indicated by where == -1.
-	 */
-	BUILD_BUG_ON(COMMIT_AT_FLAGS < 0);
-
-	if (!txn || smp_load_acquire(&txn->state) != GHOST_TXN_READY)
-		return false;
-
-	commit_flags = READ_ONCE(txn->commit_flags);
-	commit_flags &= COMMIT_AT_FLAGS;
-	if (where >= 0 && commit_flags != 0 && commit_flags != where)
-		return false;
-
-	/*
-	 * TODO: don't claim transaction if commit is going to fail
-	 * (for e.g. if 'current' is in a higher priority sched_class).
-	 *
-	 * This behavior can be finessed using 'txn->flags'.
-	 */
-	return cmpxchg_acquire(&txn->state,
-		    GHOST_TXN_READY, raw_smp_processor_id()) == GHOST_TXN_READY;
-}
-
-static inline bool txn_commit_allowed(struct rq *rq, gtid_t gtid, bool sync)
-{
-	/*
-	 * Asynchronous commit is instigated by kernel and thus always
-	 * allowed (e.g. return-to-user).
-	 */
-	if (!sync)
-		return true;
-
-	/* An agent is always allowed to commit synchronously. */
-	if (current->ghost.agent)
-		return true;
-
-	/*
-	 * A non-agent task is allowed to ping an agent as long as both
-	 * belong to the same process.
-	 */
-	if (gtid == GHOST_AGENT_GTID && same_process(rq->ghost.agent, current))
-		return true;
-
-	return false;
-}
-
-/* Returns 'true' if txn commit is instigated by the agent on its own cpu */
-static inline bool _local_commit(struct rq *rq, bool sync)
-{
-	int run_cpu = cpu_of(rq);
-	int this_cpu = raw_smp_processor_id();
-
-	lockdep_assert_held(&rq->lock);
-	WARN_ON_ONCE(preemptible());
-
-	return sync && this_cpu == run_cpu && is_agent(rq, current);
-}
-
-/* Returns 'true' if the agent is pinging itself */
-static inline bool ping_self(struct rq *rq, bool sync, gtid_t gtid)
-{
-	return _local_commit(rq, sync) && gtid == GHOST_AGENT_GTID;
-}
-
-/*
- * Returns 'true' if agent is giving up the CPU because it is switching
- * to another ghost task or idling.
- */
-static inline bool blocking_run(struct rq *rq, bool sync, gtid_t gtid)
-{
-	return _local_commit(rq, sync) && gtid != GHOST_AGENT_GTID;
-}
-
-static inline bool ghost_txn_succeeded(int state)
-{
-	return state == GHOST_TXN_COMPLETE;
-}
-
-/*
- * Caller is responsible for claiming txn (before calling this function)
- * and finalizing it (after this function returns).
- */
-static bool _ghost_commit_txn(int run_cpu, bool sync, int64_t rendezvous,
-			      int *commit_state, bool *need_rendezvous)
-{
-	gtid_t gtid;
-	struct rq *rq = NULL;
-	struct rq_flags rf;
-	struct task_struct *next;
-	bool local_run, resched = false;
-	int commit_flags = 0, run_flags, state = GHOST_TXN_COMPLETE;
-	struct ghost_txn *txn = rcu_dereference(per_cpu(ghost_txn, run_cpu));
-
-	const int supported_run_flags = RTLA_ON_PREEMPT	|
-					RTLA_ON_BLOCKED	|
-					RTLA_ON_YIELD	|
-					RTLA_ON_IDLE	|
-					NEED_L1D_FLUSH	|
-					ELIDE_PREEMPT	|
-					NEED_CPU_NOT_IDLE |
-					SEND_TASK_LATCHED |
-					DEFER_LATCHED_PREEMPTION_BY_AGENT |
-					DO_NOT_PREEMPT	|
-					0;
-
-	const int supported_commit_flags = COMMIT_AT_SCHEDULE		|
-					   COMMIT_AT_TXN_COMMIT		|
-					   ALLOW_TASK_ONCPU		|
-					   ELIDE_AGENT_BARRIER_INC	|
-					   INC_AGENT_BARRIER_ON_FAILURE	|
-					   0;
-
-	VM_BUG_ON(preemptible());
-	VM_BUG_ON(commit_state == NULL);
-	VM_BUG_ON(need_rendezvous == NULL);
-	VM_BUG_ON(run_cpu < 0 || run_cpu >= nr_cpu_ids);
-
-	*need_rendezvous = false;
-
-	if (!txn || txn->state != raw_smp_processor_id()) {
-		state = GHOST_TXN_INVALID_CPU;
-		goto out;
-	}
-
-	if (txn->version != GHOST_TXN_VERSION) {
-		state = GHOST_TXN_UNSUPPORTED_VERSION;
-		goto out;
-	}
-
-	if (txn->cpu != run_cpu) {
-		state = GHOST_TXN_INVALID_CPU;
-		goto out;
-	}
-
-	gtid = READ_ONCE(txn->gtid);
-	run_flags = READ_ONCE(txn->run_flags);
-	if (!run_flags_valid(run_flags, supported_run_flags, gtid)) {
-		state = GHOST_TXN_INVALID_FLAGS;
-		goto out;
-	}
-
-	commit_flags = READ_ONCE(txn->commit_flags);
-	if (!commit_flags_valid(commit_flags, supported_commit_flags)) {
-		state = GHOST_TXN_INVALID_FLAGS;
-		goto out;
-	}
-
-	if (!cpu_online(run_cpu)) {
-		state = GHOST_TXN_CPU_OFFLINE;
-		goto out;
-	}
-
-	if (likely(gtid > 0)) {
-		rcu_read_lock();
-		next = find_task_by_gtid(gtid);
-		if (next == NULL || next->ghost.agent) {
-			rcu_read_unlock();
-			state = next ? GHOST_TXN_INVALID_TARGET :
-				       GHOST_TXN_TARGET_NOT_FOUND;
-			goto out;
-		}
-
-		rq = task_rq_lock(next, &rf);
-		rcu_read_unlock();
-
-		if (validate_next_task(rq, next, txn->task_barrier, &state)) {
-			task_rq_unlock(rq, next, &rf);
-			rq = NULL;
-			goto out;
-		}
-
-		if (!(commit_flags & ALLOW_TASK_ONCPU) ||
-		    (task_cpu(next) != run_cpu)) {
-			if (validate_next_offcpu(rq, next, &state)) {
-				task_rq_unlock(rq, next, &rf);
-				rq = NULL;
-				goto out;
-			}
-		} else if (task_running(rq, next) &&
-			   rq->ghost.must_resched &&
-			   test_tsk_need_resched(next)) {
-			/*
-			 * 'next' is running but its oncpu days are numbered
-			 * due to TIF_NEED_RESCHED. Specifically this handles
-			 * the the race with ghost_wait_for_rendezvous() where
-			 * it calls force_offcpu() due to an earlier poisoned
-			 * rendezvous but hasn't scheduled yet (either hasn't
-			 * reached a scheduling point or waiting for 'rq->lock'
-			 * in __schedule).
-			 *
-			 * Fail the commit until 'next' gets fully offcpu.
-			 */
-			state = GHOST_TXN_TARGET_STALE;
-			task_rq_unlock(rq, next, &rf);
-			rq = NULL;
-			goto out;
-		}
-
-		rq = ghost_move_task(rq, next, run_cpu, &rf);
-
-		raw_spin_unlock(&next->pi_lock);    /* irqs still disabled */
-	} else {
-		if (gtid < GHOST_IDLE_GTID) {
-			state = GHOST_TXN_INVALID_TARGET;
-			goto out;
-		}
-		next = NULL;
-		rq = cpu_rq(run_cpu);
-		rq_lock_irqsave(rq, &rf);
-
-		if (gtid == GHOST_IDLE_GTID)
-			next = rq->idle;
-
-		if (!(commit_flags & ALLOW_TASK_ONCPU)) {
-			if (validate_next_offcpu(rq, next, &state))
-				goto out;
-		}
-	}
-
-	/*
-	 * Update 'rq->ghost_rq' latch state for pick_next_task() to use
-	 * when making a decision.
-	 */
-	if (unlikely(!rq->ghost.agent)) {
-		state = GHOST_TXN_NO_AGENT;
-		goto out;
-	}
-
-	if (unlikely(!txn_commit_allowed(rq, gtid, sync))) {
-		state = GHOST_TXN_NOT_PERMITTED;
-		goto out;
-	}
-
-	if (next && (run_flags & DO_NOT_PREEMPT) &&
-	    (task_has_ghost_policy(rq->curr) || rq->ghost.latched_task)) {
-		state = GHOST_TXN_AGENT_STALE;
-		goto out;
-	}
-
-	if (next && !ghost_can_schedule(rq, gtid)) {
-		/*
-		 * Transaction cannot be committed if CPU is not available
-		 * (but only if 'next' is a task that can run elsewhere).
-		 *
-		 * Specifically if 'txn->gtid' is GHOST_AGENT_GTID there is
-		 * no point returning an error because the agent cannot run
-		 * anywhere else.
-		 */
-		state = GHOST_TXN_CPU_UNAVAIL;
-		goto out;
-	}
-
-	local_run = blocking_run(rq, sync, gtid);
-	if (local_run) {
-		/*
-		 * Agent is doing a synchronous commit on its local cpu and
-		 * caller will schedule() on return. We ensure that its
-		 * state is up-to-date via the 'agent_barrier' check below.
-		 *
-		 * The mb orders the blocked_in_run write before the barrier
-		 * check in case of a concurrent wakeup.
-		 */
-		smp_store_mb(rq->ghost.blocked_in_run, true);
-		if (agent_barrier_get(rq->ghost.agent) !=
-		    READ_ONCE(txn->agent_barrier)) {
-			rq->ghost.blocked_in_run = false;
-			state = GHOST_TXN_AGENT_STALE;
-			goto out;
-		}
-	} else {
-		/*
-		 * We do not assert a barrier match for the remote run case:
-		 *
-		 * In a remote run case we validate that that task_barrier
-		 * is up-to-date (i.e. we have consumed the latest message for
-		 * that task). We don't care so much about the agent_barrier
-		 * because the agent is not blocking anyways.
-		 *
-		 * There is a danger in insisting that scheduling decisions be
-		 * made on the most up-to-date state. In the limit this could
-		 * lead to a livelock where the agent keeps making scheduling
-		 * decisions (but never gets to act on it). Practically we need
-		 * to consider the likelihood of a scheduling decision changing
-		 * after consuming a pending message.
-		 */
-	}
-
-	*need_rendezvous = true;
-	resched = ghost_can_schedule(rq, gtid);
-
-	if (next && task_running(rq, next)) {
-		/* 'next' is already oncpu */
-		VM_BUG_ON(!(commit_flags & ALLOW_TASK_ONCPU));
-		resched = false;
-
-		/*
-		 * If 'next' is already oncpu and rendezvous is !poisoned
-		 * then don't update rendezvous. Here's why:
-		 * - if the sync_commit succeeds there is no benefit in
-		 *   updating the rendezvous from one !poisoned value to
-		 *   another !poisoned value (this is true even if 'next'
-		 *   hasn't entered wait_for_rendezvous).
-		 * - if the sync_commit fails (due to some other cpu) and
-		 *   'next' hasn't entered wait_for_rendezvous yet then
-		 *   updating rendezvous will force 'next' offcpu
-		 *   (benign but unnecessary context switch).
-		 *
-		 * The basic idea is that if 'next' was able to get oncpu
-		 * successfully then keep it there until it is explicitly
-		 * preempted by the agent (yielding to CFS or bound to a
-		 * different eg_core).
-		 */
-		WARN_ON_ONCE(!rendezvous_reached(rq->ghost.rendezvous));
-		if (!rendezvous_poisoned(rq->ghost.rendezvous))
-			*need_rendezvous = false;
-
-		/*
-		 * 'next' is already oncpu but a different task may be latched
-		 * in 'latched_task' (for e.g. remote cpu has disabled irqs
-		 * and a resched_ipi is pending). Alternately the remote cpu
-		 * could be running the idle task organically and therefore
-		 * 'rq->ghost.run_flags' needs to be updated.
-		 *
-		 * Set 'latched_task' to NULL to recreate the state right after
-		 * 'next' got oncpu (see pick_next_task_ghost()).
-		 */
-		ghost_set_pnt_state(rq, NULL, run_flags);
-	} else {
-		/*
-		 * 'next' may be NULL if 'txn->gtid' is one of the special
-		 * encodings.
-		 */
-
-		/* "serialize" with remote-agent doing a local run */
-		if (!(commit_flags & ELIDE_AGENT_BARRIER_INC))
-			agent_barrier_inc(rq);
-
-		/*
-		 * Update latched task unless this is a ping in which case
-		 * we'll get the agent running without clobbering an already
-		 * latched task.
-		 */
-		if (likely(gtid != GHOST_AGENT_GTID))
-			ghost_set_pnt_state(rq, next, run_flags);
-
-		if (!next) {
-			/* Handle special gtid encodings (e.g. ping) */
-			schedule_next(rq, gtid, false);
-		}
-	}
-
-	if (!local_run) {
-		if (!sync) {
-			VM_BUG_ON(run_cpu != raw_smp_processor_id());
-			/*
-			 * Agents have absolute priority over normal ghost
-			 * tasks so no need to reschedule when the txn is
-			 * asynchronously committed in agent context (e.g.
-			 * return-to-user path).
-			 */
-			if (is_agent(rq, current))
-				resched = false;
-		} else {
-			/* Don't schedule if agent is pinging its own CPU */
-			if (ping_self(rq, sync, gtid))
-				resched = false;
-		}
-
-		/*
-		 * Elide the reschedule IPI if TIF_NEED_RESCHED is already set
-		 * or if the target CPU is polling for it.
-		 */
-		if (resched) {
-			resched = !test_tsk_need_resched(rq->curr) &&
-				  set_nr_and_not_polling(rq->curr);
-		}
-	}
-	VM_BUG_ON(local_run && !resched);  /* local_run must reschedule */
-
-	/*
-	 * Release store to ensure that TIF_NEED_RESCHED is visible on the
-	 * remote cpu before GHOST_NO_RENDEZVOUS so we don't release an
-	 * earlier sync-group transaction inadvertently.
-	 */
-	if (*need_rendezvous)
-		smp_store_release(&rq->ghost.rendezvous, rendezvous);
-
-	txn->cpu_seqnum = ++rq->ghost.cpu_seqnum;
-out:
-	if (rq) {
-		lockdep_assert_held(&rq->lock);
-		if (WARN_ON_ONCE(rq != cpu_rq(run_cpu))) {
-			rq_unlock_irqrestore(rq, &rf);
-			rq = NULL;
-		}
-	}
-
-	if ((commit_flags & INC_AGENT_BARRIER_ON_FAILURE) &&
-	    !ghost_txn_succeeded(state)) {
-		if (!rq) {
-			rq = cpu_rq(run_cpu);
-			rq_lock_irqsave(rq, &rf);
-		}
-		agent_barrier_inc(rq);
-	}
-
-	if (rq)
-		rq_unlock_irqrestore(rq, &rf);
-
-	*commit_state = state;
-	return resched;
-}
-
-static inline struct ghost_txn *_ghost_get_txn_ptr(int cpu)
-{
-	int this_cpu = raw_smp_processor_id();
-	struct ghost_txn *txn = rcu_dereference(per_cpu(ghost_txn, cpu));
-
-	VM_BUG_ON(preemptible());
-	VM_BUG_ON(cpu < 0 || cpu >= nr_cpu_ids);
-	if (txn && txn->state != this_cpu) {
-		/* A buggy agent can trip this. */
-		pr_info("txn->state for cpu %d was not %d!", txn->state,
-			this_cpu);
-	}
-
-	return txn;
-}
-
-static inline void _ghost_set_txn_state(struct ghost_txn *txn,
-					enum ghost_txn_state state)
-{
-	/*
-	 * Set the time with a relaxed store since we update the txn state below
-	 * with a release store. Userspace syncs with the kernel on that release
-	 * store, so the release store acts a barrier.
-	 */
-	txn->commit_time = ktime_get_ns();
-	smp_store_release(&txn->state, state);
-}
-
-static void ghost_set_txn_state(int cpu, enum ghost_txn_state state)
-{
-	struct ghost_txn *txn = _ghost_get_txn_ptr(cpu);
-
-	if (txn)
-		_ghost_set_txn_state(txn, state);
-}
-
-static inline void ghost_poison_txn(int cpu)
-{
-	ghost_set_txn_state(cpu, GHOST_TXN_POISONED);
-}
-
-static inline void ghost_claim_and_kill_txn(int cpu, enum ghost_txn_state err)
-{
-	/* claim_txn and set_txn_state must be called by the same cpu */
-	preempt_disable();
-
-	rcu_read_lock();
-	if (unlikely(ghost_claim_txn(cpu, -1)))
-		ghost_set_txn_state(cpu, err);
-	rcu_read_unlock();
-
-	/* We're often called from within the scheduler */
-	preempt_enable_no_resched();
-}
-
-static bool ghost_commit_txn(int run_cpu, bool sync, int *commit_state)
-{
-	int state;
-	bool resched, need_rendezvous;
-
-	resched = _ghost_commit_txn(run_cpu, sync, GHOST_NO_RENDEZVOUS, &state,
-				    &need_rendezvous);
-	if (commit_state)
-		*commit_state = state;
-
-	ghost_set_txn_state(run_cpu, state);
-	return resched;
-}
-
-#if defined(CONFIG_X86_64) || defined(CONFIG_X86)
-static inline void ghost_send_reschedule(struct cpumask *mask)
-{
-	int cpu;
-
-	for_each_cpu(cpu, mask) {
-		if (try_ipiless_wakeup(cpu))
-			__cpumask_clear_cpu(cpu, mask);
-	}
-
-	if (!cpumask_empty(mask))
-		apic->send_IPI_mask(mask, RESCHEDULE_VECTOR);
-
-#ifdef CONFIG_DEBUG_GHOST
-	/*
-	 * 'mask' can be modified non-deterministically due to ipiless wakeup
-	 * above and callers must not assume that 'mask' is same before and
-	 * after the call.
-	 *
-	 * Weed out such callers by clobbering 'mask' in debug builds.
-	 */
-	cpumask_clear(mask);
-#endif
-}
-#else
-static inline void ghost_send_reschedule(struct cpumask *mask)
-{
-	int cpu;
-
-	for_each_cpu(cpu, mask)
-		smp_send_reschedule(cpu);
-}
-#endif
-
-static bool _ghost_commit_pending_txn(int cpu, int where)
-{
-	if (unlikely(ghost_claim_txn(cpu, where)))
-		return ghost_commit_txn(cpu, false, NULL);
-	return false;
-}
-
-static void ghost_commit_pending_txn(int where)
-{
-	int cpu = get_cpu();
-
-	rcu_read_lock();
-	_ghost_commit_pending_txn(cpu, where);
-	rcu_read_unlock();
-
-	put_cpu();
-}
-
-extern void ghost_commit_greedy_txn(void)
-{
-	ghost_commit_pending_txn(0);	/* Commit a greedy pending txn */
-}
-
-//void ghost_commit_all_greedy_txns(void)
+//static inline bool _ghost_txn_ready(int cpu, int *commit_flags)
 //{
-//	int cpu, this_cpu;
-//	//struct ghost_enclave *e;
-//	cpumask_var_t ipimask;
+//	struct ghost_txn *txn;
+//	bool ready = false;
+//
+//	VM_BUG_ON(preemptible());
+//	VM_BUG_ON(cpu < 0 || cpu >= nr_cpu_ids);
+//
+//	rcu_read_lock();
+//	txn = rcu_dereference(per_cpu(ghost_txn, cpu));
+//	if (txn) {
+//		ready = smp_load_acquire(&txn->state) == GHOST_TXN_READY;
+//		if (commit_flags != NULL)
+//			*commit_flags = READ_ONCE(txn->commit_flags);
+//	}
+//	rcu_read_unlock();
+//
+//	return ready;
+//}
+//
+////static inline bool ghost_txn_ready(int cpu)
+////{
+////	return _ghost_txn_ready(cpu, NULL);
+////}
+//
+//static inline bool _ghost_txn_greedy(int commit_flags)
+//{
+//	return (commit_flags & COMMIT_AT_FLAGS) == 0;
+//}
+//
+//static inline bool ghost_txn_greedy(int cpu)
+//{
+//	int flags;
+//
+//	return _ghost_txn_ready(cpu, &flags) && _ghost_txn_greedy(flags);
+//}
+//
+///*
+// * Try to claim txn iff the point-of-commit matches what was requested
+// * via 'commit_flags'. Note that 'commit_flags == 0' indicates a greedy
+// * commit and matches all commit points.
+// *
+// * The only exception is when a commit is explicitly requested by
+// * the agent via GHOST_COMMIT_TXN in which case 'txn->commit_flags'
+// * is ignored (indicated by where = -1).
+// *
+// * Returns 'true' if txn was claimed and 'false' otherwise.
+// */
+//static inline bool ghost_claim_txn(int cpu, int where)
+//{
+//	struct ghost_txn *txn = rcu_dereference(per_cpu(ghost_txn, cpu));
+//	int commit_flags;
+//
+//	VM_BUG_ON(preemptible());
+//	VM_BUG_ON(cpu < 0 || cpu >= nr_cpu_ids);
 //
 //	/*
-//	 * 'cpumask_var_t' currently allocates CPU masks on the stack since
-//	 * CONFIG_CPUMASK_OFFSTACK is not set. If this flag does become set in
-//	 * the future, 'cpumask_var_t' becomes a pointer and
-//	 * 'zalloc_cpumask_var' allocates memory rather than act as a no-op. In
-//	 * that case, we will likely want to preallocate 'ipimask' for each CPU
-//	 * when the transaction region is set up rather than allocate memory on
-//	 * every timer tick. This warning will get our attention if the flag is
-//	 * set.
+//	 * Ensure that COMMIT_AT_XYZ flag is never a negative value so
+//	 * that a commit explicitly requested by the agent can be safely
+//	 * indicated by where == -1.
 //	 */
-//#ifdef CONFIG_CPUMASK_OFFSTACK
-//	WARN_ONCE(1, "Pre-allocate cpumasks");
+//	BUILD_BUG_ON(COMMIT_AT_FLAGS < 0);
+//
+//	if (!txn || smp_load_acquire(&txn->state) != GHOST_TXN_READY)
+//		return false;
+//
+//	commit_flags = READ_ONCE(txn->commit_flags);
+//	commit_flags &= COMMIT_AT_FLAGS;
+//	if (where >= 0 && commit_flags != 0 && commit_flags != where)
+//		return false;
+//
+//	/*
+//	 * TODO: don't claim transaction if commit is going to fail
+//	 * (for e.g. if 'current' is in a higher priority sched_class).
+//	 *
+//	 * This behavior can be finessed using 'txn->flags'.
+//	 */
+//	return cmpxchg_acquire(&txn->state,
+//		    GHOST_TXN_READY, raw_smp_processor_id()) == GHOST_TXN_READY;
+//}
+//
+//static inline bool txn_commit_allowed(struct rq *rq, gtid_t gtid, bool sync)
+//{
+//	/*
+//	 * Asynchronous commit is instigated by kernel and thus always
+//	 * allowed (e.g. return-to-user).
+//	 */
+//	if (!sync)
+//		return true;
+//
+//	/* An agent is always allowed to commit synchronously. */
+//	if (current->ghost.agent)
+//		return true;
+//
+//	/*
+//	 * A non-agent task is allowed to ping an agent as long as both
+//	 * belong to the same process.
+//	 */
+//	if (gtid == GHOST_AGENT_GTID && same_process(rq->ghost.agent, current))
+//		return true;
+//
+//	return false;
+//}
+//
+///* Returns 'true' if txn commit is instigated by the agent on its own cpu */
+//static inline bool _local_commit(struct rq *rq, bool sync)
+//{
+//	int run_cpu = cpu_of(rq);
+//	int this_cpu = raw_smp_processor_id();
+//
+//	lockdep_assert_held(&rq->lock);
+//	WARN_ON_ONCE(preemptible());
+//
+//	return sync && this_cpu == run_cpu && is_agent(rq, current);
+//}
+//
+///* Returns 'true' if the agent is pinging itself */
+//static inline bool ping_self(struct rq *rq, bool sync, gtid_t gtid)
+//{
+//	return _local_commit(rq, sync) && gtid == GHOST_AGENT_GTID;
+//}
+//
+///*
+// * Returns 'true' if agent is giving up the CPU because it is switching
+// * to another ghost task or idling.
+// */
+//static inline bool blocking_run(struct rq *rq, bool sync, gtid_t gtid)
+//{
+//	return _local_commit(rq, sync) && gtid != GHOST_AGENT_GTID;
+//}
+//
+//static inline bool ghost_txn_succeeded(int state)
+//{
+//	return state == GHOST_TXN_COMPLETE;
+//}
+//
+///*
+// * Caller is responsible for claiming txn (before calling this function)
+// * and finalizing it (after this function returns).
+// */
+//static bool _ghost_commit_txn(int run_cpu, bool sync, int64_t rendezvous,
+//			      int *commit_state, bool *need_rendezvous)
+//{
+//	gtid_t gtid;
+//	struct rq *rq = NULL;
+//	struct rq_flags rf;
+//	struct task_struct *next;
+//	bool local_run, resched = false;
+//	int commit_flags = 0, run_flags, state = GHOST_TXN_COMPLETE;
+//	struct ghost_txn *txn = rcu_dereference(per_cpu(ghost_txn, run_cpu));
+//
+//	const int supported_run_flags = RTLA_ON_PREEMPT	|
+//					RTLA_ON_BLOCKED	|
+//					RTLA_ON_YIELD	|
+//					RTLA_ON_IDLE	|
+//					NEED_L1D_FLUSH	|
+//					ELIDE_PREEMPT	|
+//					NEED_CPU_NOT_IDLE |
+//					SEND_TASK_LATCHED |
+//					DEFER_LATCHED_PREEMPTION_BY_AGENT |
+//					DO_NOT_PREEMPT	|
+//					0;
+//
+//	const int supported_commit_flags = COMMIT_AT_SCHEDULE		|
+//					   COMMIT_AT_TXN_COMMIT		|
+//					   ALLOW_TASK_ONCPU		|
+//					   ELIDE_AGENT_BARRIER_INC	|
+//					   INC_AGENT_BARRIER_ON_FAILURE	|
+//					   0;
+//
+//	VM_BUG_ON(preemptible());
+//	VM_BUG_ON(commit_state == NULL);
+//	VM_BUG_ON(need_rendezvous == NULL);
+//	VM_BUG_ON(run_cpu < 0 || run_cpu >= nr_cpu_ids);
+//
+//	*need_rendezvous = false;
+//
+//	if (!txn || txn->state != raw_smp_processor_id()) {
+//		state = GHOST_TXN_INVALID_CPU;
+//		goto out;
+//	}
+//
+//	if (txn->version != GHOST_TXN_VERSION) {
+//		state = GHOST_TXN_UNSUPPORTED_VERSION;
+//		goto out;
+//	}
+//
+//	if (txn->cpu != run_cpu) {
+//		state = GHOST_TXN_INVALID_CPU;
+//		goto out;
+//	}
+//
+//	gtid = READ_ONCE(txn->gtid);
+//	run_flags = READ_ONCE(txn->run_flags);
+//	if (!run_flags_valid(run_flags, supported_run_flags, gtid)) {
+//		state = GHOST_TXN_INVALID_FLAGS;
+//		goto out;
+//	}
+//
+//	commit_flags = READ_ONCE(txn->commit_flags);
+//	if (!commit_flags_valid(commit_flags, supported_commit_flags)) {
+//		state = GHOST_TXN_INVALID_FLAGS;
+//		goto out;
+//	}
+//
+//	if (!cpu_online(run_cpu)) {
+//		state = GHOST_TXN_CPU_OFFLINE;
+//		goto out;
+//	}
+//
+//	if (likely(gtid > 0)) {
+//		rcu_read_lock();
+//		next = find_task_by_gtid(gtid);
+//		if (next == NULL || next->ghost.agent) {
+//			rcu_read_unlock();
+//			state = next ? GHOST_TXN_INVALID_TARGET :
+//				       GHOST_TXN_TARGET_NOT_FOUND;
+//			goto out;
+//		}
+//
+//		rq = task_rq_lock(next, &rf);
+//		rcu_read_unlock();
+//
+//		if (validate_next_task(rq, next, txn->task_barrier, &state)) {
+//			task_rq_unlock(rq, next, &rf);
+//			rq = NULL;
+//			goto out;
+//		}
+//
+//		if (!(commit_flags & ALLOW_TASK_ONCPU) ||
+//		    (task_cpu(next) != run_cpu)) {
+//			if (validate_next_offcpu(rq, next, &state)) {
+//				task_rq_unlock(rq, next, &rf);
+//				rq = NULL;
+//				goto out;
+//			}
+//		} else if (task_running(rq, next) &&
+//			   rq->ghost.must_resched &&
+//			   test_tsk_need_resched(next)) {
+//			/*
+//			 * 'next' is running but its oncpu days are numbered
+//			 * due to TIF_NEED_RESCHED. Specifically this handles
+//			 * the the race with ghost_wait_for_rendezvous() where
+//			 * it calls force_offcpu() due to an earlier poisoned
+//			 * rendezvous but hasn't scheduled yet (either hasn't
+//			 * reached a scheduling point or waiting for 'rq->lock'
+//			 * in __schedule).
+//			 *
+//			 * Fail the commit until 'next' gets fully offcpu.
+//			 */
+//			state = GHOST_TXN_TARGET_STALE;
+//			task_rq_unlock(rq, next, &rf);
+//			rq = NULL;
+//			goto out;
+//		}
+//
+//		rq = ghost_move_task(rq, next, run_cpu, &rf);
+//
+//		raw_spin_unlock(&next->pi_lock);    /* irqs still disabled */
+//	} else {
+//		if (gtid < GHOST_IDLE_GTID) {
+//			state = GHOST_TXN_INVALID_TARGET;
+//			goto out;
+//		}
+//		next = NULL;
+//		rq = cpu_rq(run_cpu);
+//		rq_lock_irqsave(rq, &rf);
+//
+//		if (gtid == GHOST_IDLE_GTID)
+//			next = rq->idle;
+//
+//		if (!(commit_flags & ALLOW_TASK_ONCPU)) {
+//			if (validate_next_offcpu(rq, next, &state))
+//				goto out;
+//		}
+//	}
+//
+//	/*
+//	 * Update 'rq->ghost_rq' latch state for pick_next_task() to use
+//	 * when making a decision.
+//	 */
+//	if (unlikely(!rq->ghost.agent)) {
+//		state = GHOST_TXN_NO_AGENT;
+//		goto out;
+//	}
+//
+//	if (unlikely(!txn_commit_allowed(rq, gtid, sync))) {
+//		state = GHOST_TXN_NOT_PERMITTED;
+//		goto out;
+//	}
+//
+//	if (next && (run_flags & DO_NOT_PREEMPT) &&
+//	    (task_has_ghost_policy(rq->curr) || rq->ghost.latched_task)) {
+//		state = GHOST_TXN_AGENT_STALE;
+//		goto out;
+//	}
+//
+//	if (next && !ghost_can_schedule(rq, gtid)) {
+//		/*
+//		 * Transaction cannot be committed if CPU is not available
+//		 * (but only if 'next' is a task that can run elsewhere).
+//		 *
+//		 * Specifically if 'txn->gtid' is GHOST_AGENT_GTID there is
+//		 * no point returning an error because the agent cannot run
+//		 * anywhere else.
+//		 */
+//		state = GHOST_TXN_CPU_UNAVAIL;
+//		goto out;
+//	}
+//
+//	local_run = blocking_run(rq, sync, gtid);
+//	if (local_run) {
+//		/*
+//		 * Agent is doing a synchronous commit on its local cpu and
+//		 * caller will schedule() on return. We ensure that its
+//		 * state is up-to-date via the 'agent_barrier' check below.
+//		 *
+//		 * The mb orders the blocked_in_run write before the barrier
+//		 * check in case of a concurrent wakeup.
+//		 */
+//		smp_store_mb(rq->ghost.blocked_in_run, true);
+//		if (agent_barrier_get(rq->ghost.agent) !=
+//		    READ_ONCE(txn->agent_barrier)) {
+//			rq->ghost.blocked_in_run = false;
+//			state = GHOST_TXN_AGENT_STALE;
+//			goto out;
+//		}
+//	} else {
+//		/*
+//		 * We do not assert a barrier match for the remote run case:
+//		 *
+//		 * In a remote run case we validate that that task_barrier
+//		 * is up-to-date (i.e. we have consumed the latest message for
+//		 * that task). We don't care so much about the agent_barrier
+//		 * because the agent is not blocking anyways.
+//		 *
+//		 * There is a danger in insisting that scheduling decisions be
+//		 * made on the most up-to-date state. In the limit this could
+//		 * lead to a livelock where the agent keeps making scheduling
+//		 * decisions (but never gets to act on it). Practically we need
+//		 * to consider the likelihood of a scheduling decision changing
+//		 * after consuming a pending message.
+//		 */
+//	}
+//
+//	*need_rendezvous = true;
+//	resched = ghost_can_schedule(rq, gtid);
+//
+//	if (next && task_running(rq, next)) {
+//		/* 'next' is already oncpu */
+//		VM_BUG_ON(!(commit_flags & ALLOW_TASK_ONCPU));
+//		resched = false;
+//
+//		/*
+//		 * If 'next' is already oncpu and rendezvous is !poisoned
+//		 * then don't update rendezvous. Here's why:
+//		 * - if the sync_commit succeeds there is no benefit in
+//		 *   updating the rendezvous from one !poisoned value to
+//		 *   another !poisoned value (this is true even if 'next'
+//		 *   hasn't entered wait_for_rendezvous).
+//		 * - if the sync_commit fails (due to some other cpu) and
+//		 *   'next' hasn't entered wait_for_rendezvous yet then
+//		 *   updating rendezvous will force 'next' offcpu
+//		 *   (benign but unnecessary context switch).
+//		 *
+//		 * The basic idea is that if 'next' was able to get oncpu
+//		 * successfully then keep it there until it is explicitly
+//		 * preempted by the agent (yielding to CFS or bound to a
+//		 * different eg_core).
+//		 */
+//		WARN_ON_ONCE(!rendezvous_reached(rq->ghost.rendezvous));
+//		if (!rendezvous_poisoned(rq->ghost.rendezvous))
+//			*need_rendezvous = false;
+//
+//		/*
+//		 * 'next' is already oncpu but a different task may be latched
+//		 * in 'latched_task' (for e.g. remote cpu has disabled irqs
+//		 * and a resched_ipi is pending). Alternately the remote cpu
+//		 * could be running the idle task organically and therefore
+//		 * 'rq->ghost.run_flags' needs to be updated.
+//		 *
+//		 * Set 'latched_task' to NULL to recreate the state right after
+//		 * 'next' got oncpu (see pick_next_task_ghost()).
+//		 */
+//		ghost_set_pnt_state(rq, NULL, run_flags);
+//	} else {
+//		/*
+//		 * 'next' may be NULL if 'txn->gtid' is one of the special
+//		 * encodings.
+//		 */
+//
+//		/* "serialize" with remote-agent doing a local run */
+//		if (!(commit_flags & ELIDE_AGENT_BARRIER_INC))
+//			agent_barrier_inc(rq);
+//
+//		/*
+//		 * Update latched task unless this is a ping in which case
+//		 * we'll get the agent running without clobbering an already
+//		 * latched task.
+//		 */
+//		if (likely(gtid != GHOST_AGENT_GTID))
+//			ghost_set_pnt_state(rq, next, run_flags);
+//
+//		if (!next) {
+//			/* Handle special gtid encodings (e.g. ping) */
+//			schedule_next(rq, gtid, false);
+//		}
+//	}
+//
+//	if (!local_run) {
+//		if (!sync) {
+//			VM_BUG_ON(run_cpu != raw_smp_processor_id());
+//			/*
+//			 * Agents have absolute priority over normal ghost
+//			 * tasks so no need to reschedule when the txn is
+//			 * asynchronously committed in agent context (e.g.
+//			 * return-to-user path).
+//			 */
+//			if (is_agent(rq, current))
+//				resched = false;
+//		} else {
+//			/* Don't schedule if agent is pinging its own CPU */
+//			if (ping_self(rq, sync, gtid))
+//				resched = false;
+//		}
+//
+//		/*
+//		 * Elide the reschedule IPI if TIF_NEED_RESCHED is already set
+//		 * or if the target CPU is polling for it.
+//		 */
+//		if (resched) {
+//			resched = !test_tsk_need_resched(rq->curr) &&
+//				  set_nr_and_not_polling(rq->curr);
+//		}
+//	}
+//	VM_BUG_ON(local_run && !resched);  /* local_run must reschedule */
+//
+//	/*
+//	 * Release store to ensure that TIF_NEED_RESCHED is visible on the
+//	 * remote cpu before GHOST_NO_RENDEZVOUS so we don't release an
+//	 * earlier sync-group transaction inadvertently.
+//	 */
+//	if (*need_rendezvous)
+//		smp_store_release(&rq->ghost.rendezvous, rendezvous);
+//
+//	txn->cpu_seqnum = ++rq->ghost.cpu_seqnum;
+//out:
+//	if (rq) {
+//		lockdep_assert_held(&rq->lock);
+//		if (WARN_ON_ONCE(rq != cpu_rq(run_cpu))) {
+//			rq_unlock_irqrestore(rq, &rf);
+//			rq = NULL;
+//		}
+//	}
+//
+//	if ((commit_flags & INC_AGENT_BARRIER_ON_FAILURE) &&
+//	    !ghost_txn_succeeded(state)) {
+//		if (!rq) {
+//			rq = cpu_rq(run_cpu);
+//			rq_lock_irqsave(rq, &rf);
+//		}
+//		agent_barrier_inc(rq);
+//	}
+//
+//	if (rq)
+//		rq_unlock_irqrestore(rq, &rf);
+//
+//	*commit_state = state;
+//	return resched;
+//}
+//
+//static inline struct ghost_txn *_ghost_get_txn_ptr(int cpu)
+//{
+//	int this_cpu = raw_smp_processor_id();
+//	struct ghost_txn *txn = rcu_dereference(per_cpu(ghost_txn, cpu));
+//
+//	VM_BUG_ON(preemptible());
+//	VM_BUG_ON(cpu < 0 || cpu >= nr_cpu_ids);
+//	if (txn && txn->state != this_cpu) {
+//		/* A buggy agent can trip this. */
+//		pr_info("txn->state for cpu %d was not %d!", txn->state,
+//			this_cpu);
+//	}
+//
+//	return txn;
+//}
+//
+//static inline void _ghost_set_txn_state(struct ghost_txn *txn,
+//					enum ghost_txn_state state)
+//{
+//	/*
+//	 * Set the time with a relaxed store since we update the txn state below
+//	 * with a release store. Userspace syncs with the kernel on that release
+//	 * store, so the release store acts a barrier.
+//	 */
+//	txn->commit_time = ktime_get_ns();
+//	smp_store_release(&txn->state, state);
+//}
+//
+//static void ghost_set_txn_state(int cpu, enum ghost_txn_state state)
+//{
+//	struct ghost_txn *txn = _ghost_get_txn_ptr(cpu);
+//
+//	if (txn)
+//		_ghost_set_txn_state(txn, state);
+//}
+//
+//static inline void ghost_poison_txn(int cpu)
+//{
+//	ghost_set_txn_state(cpu, GHOST_TXN_POISONED);
+//}
+//
+//static inline void ghost_claim_and_kill_txn(int cpu, enum ghost_txn_state err)
+//{
+//	/* claim_txn and set_txn_state must be called by the same cpu */
+//	preempt_disable();
+//
+//	rcu_read_lock();
+//	if (unlikely(ghost_claim_txn(cpu, -1)))
+//		ghost_set_txn_state(cpu, err);
+//	rcu_read_unlock();
+//
+//	/* We're often called from within the scheduler */
+//	preempt_enable_no_resched();
+//}
+//
+//static bool ghost_commit_txn(int run_cpu, bool sync, int *commit_state)
+//{
+//	int state;
+//	bool resched, need_rendezvous;
+//
+//	resched = _ghost_commit_txn(run_cpu, sync, GHOST_NO_RENDEZVOUS, &state,
+//				    &need_rendezvous);
+//	if (commit_state)
+//		*commit_state = state;
+//
+//	ghost_set_txn_state(run_cpu, state);
+//	return resched;
+//}
+//
+//#if defined(CONFIG_X86_64) || defined(CONFIG_X86)
+//static inline void ghost_send_reschedule(struct cpumask *mask)
+//{
+//	int cpu;
+//
+//	for_each_cpu(cpu, mask) {
+//		if (try_ipiless_wakeup(cpu))
+//			__cpumask_clear_cpu(cpu, mask);
+//	}
+//
+//	if (!cpumask_empty(mask))
+//		apic->send_IPI_mask(mask, RESCHEDULE_VECTOR);
+//
+//#ifdef CONFIG_DEBUG_GHOST
+//	/*
+//	 * 'mask' can be modified non-deterministically due to ipiless wakeup
+//	 * above and callers must not assume that 'mask' is same before and
+//	 * after the call.
+//	 *
+//	 * Weed out such callers by clobbering 'mask' in debug builds.
+//	 */
+//	cpumask_clear(mask);
+//#endif
+//}
+//#else
+//static inline void ghost_send_reschedule(struct cpumask *mask)
+//{
+//	int cpu;
+//
+//	for_each_cpu(cpu, mask)
+//		smp_send_reschedule(cpu);
+//}
 //#endif
 //
-//	if (!zalloc_cpumask_var(&ipimask, GFP_ATOMIC))
-//		return;
+//static bool _ghost_commit_pending_txn(int cpu, int where)
+//{
+//	if (unlikely(ghost_claim_txn(cpu, where)))
+//		return ghost_commit_txn(cpu, false, NULL);
+//	return false;
+//}
 //
-//	this_cpu = get_cpu();
+//static void ghost_commit_pending_txn(int where)
+//{
+//	int cpu = get_cpu();
+//
 //	rcu_read_lock();
-//	//e = rcu_dereference(per_cpu(enclave, this_cpu));
-//	//if (!e)
-//	//	goto done;
-//	/*
-//	 * Note that e's cpu mask could be changed concurrently, with cpus added
-//	 * or removed.  This is benign.  First, any commits will look at the
-//	 * rcu-protected ghost_txn pointer.  That's what really matters, and
-//	 * any caller to __enclave_unpublish_cpu() will synchronize_rcu().
-//	 *
-//	 * Furthermore, if a cpu is added while we are looking (which is not
-//	 * protected by RCU), it's not a big deal.  This is a greedy commit, and
-//	 * we'll catch it on the next tick.
-//	 */
-//	//for_each_cpu(cpu, &e->cpus) {
-//	//	/*
-//	//	 * Send a resched IPI to remote CPUs (and do not commit those
-//	//	 * txns) but commit a txn for this CPU.
-//	//	 */
-//	//	if (cpu == this_cpu)
-//	//		ghost_commit_greedy_txn();
-//	//	else if (ghost_txn_greedy(cpu))
-//	//		__cpumask_set_cpu(cpu, ipimask);
-//	//}
-//	/* Poke the remote CPUs so that they see their pending txns. */
-//	ghost_send_reschedule(ipimask);
-//done:
-//	free_cpumask_var(ipimask);
+//	_ghost_commit_pending_txn(cpu, where);
 //	rcu_read_unlock();
+//
 //	put_cpu();
 //}
-
-static void ghost_reached_rendezvous(int cpu, int64_t target)
-{
-	struct rq *rq;
-
-	WARN_ON_ONCE(preemptible());
-
-	rq = cpu_rq(cpu);
-	smp_store_release(&rq->ghost.rendezvous, target);
-}
-
-/*
- * A sync-group cookie uniquely identifies a sync-group commit.
- *
- * It is useful to identify the initiator and participants of the sync-group.
- */
-static inline int64_t ghost_sync_group_cookie(void)
-{
-	int64_t val;
-
-	WARN_ON_ONCE(preemptible());
-	BUILD_BUG_ON(NR_CPUS > (1U << SG_COOKIE_CPU_BITS));
-
-	val = __this_cpu_inc_return(sync_group_cookie);
-	VM_BUG_ON((val <= 0) || (val & GHOST_POISONED_RENDEZVOUS));
-
-	return val;
-}
-
-//int ghost_sync_group(struct ghost_enclave *e,
-int ghost_sync_group(
-			  struct ghost_ioc_commit_txn __user *arg)
-{
-	int64_t target;
-	bool failed = false;
-	bool local_resched = false;
-	int cpu, this_cpu, error, state;
-	cpumask_var_t cpumask, ipimask, rendmask;
-
-	ulong *user_mask_ptr;
-	uint user_mask_len;
-	int flags;
-	struct ghost_ioc_commit_txn commit_txn;
-
-	const int valid_flags = 0;
-
-	if (copy_from_user(&commit_txn, arg,
-			   sizeof(struct ghost_ioc_commit_txn)))
-		return -EFAULT;
-
-	user_mask_ptr = commit_txn.mask_ptr;
-	user_mask_len = commit_txn.mask_len;
-	flags = commit_txn.flags;
-
-	if (flags & ~valid_flags)
-		return -EINVAL;
-
-	if (!alloc_cpumask_var(&cpumask, GFP_KERNEL))
-		return -ENOMEM;
-
-	error = get_user_cpu_mask(user_mask_ptr, user_mask_len, cpumask);
-	if (error) {
-		free_cpumask_var(cpumask);
-		return error;
-	}
-
-	if (!zalloc_cpumask_var(&ipimask, GFP_KERNEL)) {
-		free_cpumask_var(cpumask);
-		return -ENOMEM;
-	}
-
-	if (!zalloc_cpumask_var(&rendmask, GFP_KERNEL)) {
-		free_cpumask_var(cpumask);
-		free_cpumask_var(ipimask);
-		return -ENOMEM;
-	}
-
-	preempt_disable();
-	this_cpu = raw_smp_processor_id();
-	target = ghost_sync_group_cookie();
-
-	rcu_read_lock();
-
-	/*
-	 * Claim all transactions. We have the following invariant at the
-	 * end of the loop:
-	 * 'failed'	'cpumask'
-	 * false	all sync_group cpus.
-	 * true		subset of sync_group cpus with claimed txns.
-	 */
-	for_each_cpu(cpu, cpumask) {
-		if (WARN_ON_ONCE(!ghost_claim_txn(cpu, -1))) {
-			/*
-			 * This is not expected and points at a programming
-			 * error in the agent (e.g. txn was async committed
-			 * on another cpu).
-			 */
-			failed = true;
-			__cpumask_clear_cpu(cpu, cpumask);
-		}
-	}
-
-	/*
-	 * Commit transactions. We have the following invariant at the end
-	 * of the loop:
-	 * 'failed'	'cpumask'
-	 * false	all sync_group cpus.
-	 * true		sync_group subset with successfully committed txns.
-	 *
-	 * In either case 'ipimask' contains the CPUs that must be interrupted
-	 * to observe the updated scheduling state. It is always a a subset of
-	 * 'cpumask' because:
-	 * - TIF_NEED_RESCHED already set or remote cpu is polling for it.
-	 * - reschedule on the local cpu is captured in 'local_resched'.
-	 *
-	 * Note that for_each_cpu_wrap() guarantees that 'this_cpu' is the
-	 * last cpu visited in the loop. This lets _ghost_commit_txn() set
-	 * 'blocked_in_run=true' for local commits safely (otherwise the
-	 * caller needs to clear 'blocked_in_run' if the overall sync_group
-	 * fails to commit subsequently).
-	 */
-	for_each_cpu_wrap(cpu, cpumask, this_cpu + 1) {
-		bool resched, need_rendezvous;
-		struct rq *rq = cpu_rq(cpu);
-		struct rq_flags rf;
-		struct ghost_txn *txn;
-		int commit_flags;
-
-		/*
-		 * No point in committing this txn if we know a prior txn
-		 * failed to commit.
-		 */
-		if (failed) {
-			txn = rcu_dereference(per_cpu(ghost_txn, cpu));
-			commit_flags = READ_ONCE(txn->commit_flags);
-
-			if (commit_flags & INC_AGENT_BARRIER_ON_FAILURE) {
-				rq_lock_irqsave(rq, &rf);
-				agent_barrier_inc(rq);
-				rq_unlock_irqrestore(rq, &rf);
-			}
-			ghost_poison_txn(cpu);
-			__cpumask_clear_cpu(cpu, cpumask);
-			continue;
-		}
-
-		resched = _ghost_commit_txn(cpu, true, -target, &state,
-					    &need_rendezvous);
-		if (!ghost_txn_succeeded(state)) {
-			VM_BUG_ON(resched);
-			VM_BUG_ON(need_rendezvous);
-			failed = true;
-			ghost_set_txn_state(cpu, state);
-			__cpumask_clear_cpu(cpu, cpumask);
-		} else {
-			if (resched) {
-				VM_BUG_ON(!need_rendezvous);
-				if (cpu == this_cpu)
-					local_resched = true;
-				else
-					__cpumask_set_cpu(cpu, ipimask);
-			}
-
-			if (need_rendezvous)
-				__cpumask_set_cpu(cpu, rendmask);
-		}
-	}
-
-	/*
-	 * Send resched IPI to CPUs that traverse the need_resched edge (0->1).
-	 *
-	 * _ghost_commit_txn() assumes that if need_resched is set then an IPI
-	 * must have been already sent.
-	 */
-	ghost_send_reschedule(ipimask);
-
-	/*
-	 * The overall sync_group failed but we may have successfully updated
-	 * scheduling state on a subset of CPUs. Poison 'target' to get these
-	 * cpus to reschedule immediately after reaching rendezvous.
-	 */
-	if (failed)
-		target |= GHOST_POISONED_RENDEZVOUS;
-
-	for_each_cpu(cpu, rendmask)
-		ghost_reached_rendezvous(cpu, target);
-
-	state = failed ? GHOST_TXN_POISONED : GHOST_TXN_COMPLETE;
-	for_each_cpu(cpu, cpumask) {
-		struct ghost_txn *txn = _ghost_get_txn_ptr(cpu);
-
-		if (!txn) {
-			/*
-			 * We've committed, but the cpu has since been removed
-			 * from the enclave.  Possibly it's destroyed.
-			 */
-			continue;
-		}
-		_ghost_set_txn_state(txn, state);
-		if (!failed) {
-			/*
-			 * Release ownership in case we end up scheduling on
-			 * this cpu (thus precluding the agent from doing so
-			 * itself). When control eventually returns to the
-			 * agent the return value can be used to detect a
-			 * successful commit.
-			 *
-			 * N.B. even though not strictly necessary the txn
-			 * ownership is released even if the local cpu is
-			 * not scheduling. This is intentional to keep the
-			 * userspace code consistent (it doesn't need to
-			 * distinguish between local/remote sync commits).
-			 */
-			smp_store_release(&txn->u.sync_group_owner, -1);
-		} else {
-			/*
-			 * The commit failed but the agent retains ownership
-			 * of the transactions in the sync_group. The agent
-			 * can release ownership after it has inspected the
-			 * reason for failure.
-			 */
-		}
-	}
-
-	rcu_read_unlock();
-
-	/* Reschedule (potentially switching to 'latched_task'). */
-	if (local_resched) {
-		WARN_ON_ONCE(failed);
-		ghost_agent_schedule();
-	}
-
-	WARN_ON_ONCE(this_rq()->ghost.blocked_in_run);
-
-	preempt_enable_no_resched();
-	free_cpumask_var(cpumask);
-	free_cpumask_var(ipimask);
-	free_cpumask_var(rendmask);
-	return !failed;
-}
-
-//int ioctl_ghost_commit_txn(struct ghost_enclave *e,
-int ioctl_ghost_commit_txn(
-			  struct ghost_ioc_commit_txn __user *arg)
-{
-	int error, state;
-	int cpu, this_cpu;
-	int failed_commits = 0;
-	bool local_resched = false;
-	cpumask_var_t cpumask, ipimask;
-
-	ulong *user_mask_ptr;
-	uint user_mask_len;
-	int flags;
-	struct ghost_ioc_commit_txn commit_txn;
-
-	const int valid_flags = 0;
-
-	if (copy_from_user(&commit_txn, arg,
-			   sizeof(struct ghost_ioc_commit_txn)))
-		return -EFAULT;
-
-	user_mask_ptr = commit_txn.mask_ptr;
-	user_mask_len = commit_txn.mask_len;
-	flags = commit_txn.flags;
-
-	if (flags & ~valid_flags)
-		return -EINVAL;
-
-	if (!alloc_cpumask_var(&cpumask, GFP_KERNEL))
-		return -ENOMEM;
-
-	error = get_user_cpu_mask(user_mask_ptr, user_mask_len, cpumask);
-	if (error) {
-		free_cpumask_var(cpumask);
-		return error;
-	}
-
-	if (!zalloc_cpumask_var(&ipimask, GFP_KERNEL)) {
-		free_cpumask_var(cpumask);
-		return -ENOMEM;
-	}
-
-#ifdef notyet
-	/* Restrict 'cpumask' to the current enclave. */
-	//ghost_enclave_cpus_allowed(current, cpus_allowed);
-	cpumask_and(cpumask, cpumask, cpus_allowed);
-#endif
-
-	preempt_disable();
-	this_cpu = raw_smp_processor_id();
-
-	rcu_read_lock();
-	for_each_cpu_wrap(cpu, cpumask, this_cpu + 1) {
-		int commit_flags;
-		bool greedy_commit, inline_commit;
-
-		if (!_ghost_txn_ready(cpu, &commit_flags))
-			continue;
-
-		greedy_commit = _ghost_txn_greedy(commit_flags);
-		inline_commit = (commit_flags & COMMIT_AT_TXN_COMMIT);
-
-		if (cpu != this_cpu && !inline_commit) {
-			/*
-			 * Only send an IPI if transaction can be committed by
-			 * the remote CPU. Notably this excludes transactions
-			 * that must be committed in specific code paths (for
-			 * e.g. COMMIT_AT_SCHEDULE used for a pre-staged txn).
-			 */
-			if (greedy_commit)
-				__cpumask_set_cpu(cpu, ipimask);
-
-			continue;
-		}
-
-		/*
-		 * Agent wants us to commit a transaction whose 'commit_flags'
-		 * indicate that it should be committed elsewhere (for e.g.
-		 * COMMIT_AT_SCHEDULE for a pre-staged transaction).
-		 */
-		WARN_ONCE(!greedy_commit && !inline_commit,
-			  "Unexpected txn->commit_flags %#x on cpu %d",
-			  commit_flags, cpu);
-
-		/*
-		 * Commit txn locally either because it targets 'this_cpu'
-		 * or caller wants it committed inline.
-		 */
-		if (!ghost_claim_txn(cpu, -1)) {
-			failed_commits++;
-			continue;
-		}
-
-		/*
-		 * If there are failed commits then poison the local commit
-		 * so we'll return from this syscall immediately (as opposed
-		 * to switching to a task which would delay reaction to the
-		 * failed commits).
-		 *
-		 * Note that for_each_cpu_wrap() guarantees that 'this_cpu'
-		 * is the last cpu visited in the loop so 'failed_commits'
-		 * is final.
-		 */
-		if (failed_commits > 0 && cpu == this_cpu) {
-			ghost_poison_txn(cpu);
-			continue;
-		}
-
-		if (ghost_commit_txn(cpu, true, &state)) {
-			WARN_ON_ONCE(!ghost_txn_succeeded(state));
-			if (cpu == this_cpu)
-				local_resched = true;
-			else
-				__cpumask_set_cpu(cpu, ipimask);
-		} else if (!ghost_txn_succeeded(state)) {
-			failed_commits++;
-		} else {
-			/* commit succeeded, resched not needed */
-		}
-	}
-	rcu_read_unlock();
-
-	ghost_send_reschedule(ipimask);
-
-	/* Reschedule (potentially switching to 'latched_task'). */
-	if (local_resched) {
-		WARN_ON_ONCE(failed_commits);
-		ghost_agent_schedule();
-	}
-
-	WARN_ON_ONCE(this_rq()->ghost.blocked_in_run);
-
-	preempt_enable_no_resched();
-	free_cpumask_var(cpumask);
-	free_cpumask_var(ipimask);
-	return 0;
-}
+//
+//extern void ghost_commit_greedy_txn(void)
+//{
+//	ghost_commit_pending_txn(0);	/* Commit a greedy pending txn */
+//}
+//
+////void ghost_commit_all_greedy_txns(void)
+////{
+////	int cpu, this_cpu;
+////	//struct ghost_enclave *e;
+////	cpumask_var_t ipimask;
+////
+////	/*
+////	 * 'cpumask_var_t' currently allocates CPU masks on the stack since
+////	 * CONFIG_CPUMASK_OFFSTACK is not set. If this flag does become set in
+////	 * the future, 'cpumask_var_t' becomes a pointer and
+////	 * 'zalloc_cpumask_var' allocates memory rather than act as a no-op. In
+////	 * that case, we will likely want to preallocate 'ipimask' for each CPU
+////	 * when the transaction region is set up rather than allocate memory on
+////	 * every timer tick. This warning will get our attention if the flag is
+////	 * set.
+////	 */
+////#ifdef CONFIG_CPUMASK_OFFSTACK
+////	WARN_ONCE(1, "Pre-allocate cpumasks");
+////#endif
+////
+////	if (!zalloc_cpumask_var(&ipimask, GFP_ATOMIC))
+////		return;
+////
+////	this_cpu = get_cpu();
+////	rcu_read_lock();
+////	//e = rcu_dereference(per_cpu(enclave, this_cpu));
+////	//if (!e)
+////	//	goto done;
+////	/*
+////	 * Note that e's cpu mask could be changed concurrently, with cpus added
+////	 * or removed.  This is benign.  First, any commits will look at the
+////	 * rcu-protected ghost_txn pointer.  That's what really matters, and
+////	 * any caller to __enclave_unpublish_cpu() will synchronize_rcu().
+////	 *
+////	 * Furthermore, if a cpu is added while we are looking (which is not
+////	 * protected by RCU), it's not a big deal.  This is a greedy commit, and
+////	 * we'll catch it on the next tick.
+////	 */
+////	//for_each_cpu(cpu, &e->cpus) {
+////	//	/*
+////	//	 * Send a resched IPI to remote CPUs (and do not commit those
+////	//	 * txns) but commit a txn for this CPU.
+////	//	 */
+////	//	if (cpu == this_cpu)
+////	//		ghost_commit_greedy_txn();
+////	//	else if (ghost_txn_greedy(cpu))
+////	//		__cpumask_set_cpu(cpu, ipimask);
+////	//}
+////	/* Poke the remote CPUs so that they see their pending txns. */
+////	ghost_send_reschedule(ipimask);
+////done:
+////	free_cpumask_var(ipimask);
+////	rcu_read_unlock();
+////	put_cpu();
+////}
+//
+//static void ghost_reached_rendezvous(int cpu, int64_t target)
+//{
+//	struct rq *rq;
+//
+//	WARN_ON_ONCE(preemptible());
+//
+//	rq = cpu_rq(cpu);
+//	smp_store_release(&rq->ghost.rendezvous, target);
+//}
+//
+///*
+// * A sync-group cookie uniquely identifies a sync-group commit.
+// *
+// * It is useful to identify the initiator and participants of the sync-group.
+// */
+//static inline int64_t ghost_sync_group_cookie(void)
+//{
+//	int64_t val;
+//
+//	WARN_ON_ONCE(preemptible());
+//	BUILD_BUG_ON(NR_CPUS > (1U << SG_COOKIE_CPU_BITS));
+//
+//	val = __this_cpu_inc_return(sync_group_cookie);
+//	VM_BUG_ON((val <= 0) || (val & GHOST_POISONED_RENDEZVOUS));
+//
+//	return val;
+//}
+//
+////int ghost_sync_group(struct ghost_enclave *e,
+////int ghost_sync_group(
+////			  struct ghost_ioc_commit_txn __user *arg)
+////{
+////	int64_t target;
+////	bool failed = false;
+////	bool local_resched = false;
+////	int cpu, this_cpu, error, state;
+////	cpumask_var_t cpumask, ipimask, rendmask;
+////
+////	ulong *user_mask_ptr;
+////	uint user_mask_len;
+////	int flags;
+////	struct ghost_ioc_commit_txn commit_txn;
+////
+////	const int valid_flags = 0;
+////
+////	if (copy_from_user(&commit_txn, arg,
+////			   sizeof(struct ghost_ioc_commit_txn)))
+////		return -EFAULT;
+////
+////	user_mask_ptr = commit_txn.mask_ptr;
+////	user_mask_len = commit_txn.mask_len;
+////	flags = commit_txn.flags;
+////
+////	if (flags & ~valid_flags)
+////		return -EINVAL;
+////
+////	if (!alloc_cpumask_var(&cpumask, GFP_KERNEL))
+////		return -ENOMEM;
+////
+////	error = get_user_cpu_mask(user_mask_ptr, user_mask_len, cpumask);
+////	if (error) {
+////		free_cpumask_var(cpumask);
+////		return error;
+////	}
+////
+////	if (!zalloc_cpumask_var(&ipimask, GFP_KERNEL)) {
+////		free_cpumask_var(cpumask);
+////		return -ENOMEM;
+////	}
+////
+////	if (!zalloc_cpumask_var(&rendmask, GFP_KERNEL)) {
+////		free_cpumask_var(cpumask);
+////		free_cpumask_var(ipimask);
+////		return -ENOMEM;
+////	}
+////
+////	preempt_disable();
+////	this_cpu = raw_smp_processor_id();
+////	target = ghost_sync_group_cookie();
+////
+////	rcu_read_lock();
+////
+////	/*
+////	 * Claim all transactions. We have the following invariant at the
+////	 * end of the loop:
+////	 * 'failed'	'cpumask'
+////	 * false	all sync_group cpus.
+////	 * true		subset of sync_group cpus with claimed txns.
+////	 */
+////	for_each_cpu(cpu, cpumask) {
+////		if (WARN_ON_ONCE(!ghost_claim_txn(cpu, -1))) {
+////			/*
+////			 * This is not expected and points at a programming
+////			 * error in the agent (e.g. txn was async committed
+////			 * on another cpu).
+////			 */
+////			failed = true;
+////			__cpumask_clear_cpu(cpu, cpumask);
+////		}
+////	}
+////
+////	/*
+////	 * Commit transactions. We have the following invariant at the end
+////	 * of the loop:
+////	 * 'failed'	'cpumask'
+////	 * false	all sync_group cpus.
+////	 * true		sync_group subset with successfully committed txns.
+////	 *
+////	 * In either case 'ipimask' contains the CPUs that must be interrupted
+////	 * to observe the updated scheduling state. It is always a a subset of
+////	 * 'cpumask' because:
+////	 * - TIF_NEED_RESCHED already set or remote cpu is polling for it.
+////	 * - reschedule on the local cpu is captured in 'local_resched'.
+////	 *
+////	 * Note that for_each_cpu_wrap() guarantees that 'this_cpu' is the
+////	 * last cpu visited in the loop. This lets _ghost_commit_txn() set
+////	 * 'blocked_in_run=true' for local commits safely (otherwise the
+////	 * caller needs to clear 'blocked_in_run' if the overall sync_group
+////	 * fails to commit subsequently).
+////	 */
+////	for_each_cpu_wrap(cpu, cpumask, this_cpu + 1) {
+////		bool resched, need_rendezvous;
+////		struct rq *rq = cpu_rq(cpu);
+////		struct rq_flags rf;
+////		struct ghost_txn *txn;
+////		int commit_flags;
+////
+////		/*
+////		 * No point in committing this txn if we know a prior txn
+////		 * failed to commit.
+////		 */
+////		if (failed) {
+////			txn = rcu_dereference(per_cpu(ghost_txn, cpu));
+////			commit_flags = READ_ONCE(txn->commit_flags);
+////
+////			if (commit_flags & INC_AGENT_BARRIER_ON_FAILURE) {
+////				rq_lock_irqsave(rq, &rf);
+////				agent_barrier_inc(rq);
+////				rq_unlock_irqrestore(rq, &rf);
+////			}
+////			ghost_poison_txn(cpu);
+////			__cpumask_clear_cpu(cpu, cpumask);
+////			continue;
+////		}
+////
+////		resched = _ghost_commit_txn(cpu, true, -target, &state,
+////					    &need_rendezvous);
+////		if (!ghost_txn_succeeded(state)) {
+////			VM_BUG_ON(resched);
+////			VM_BUG_ON(need_rendezvous);
+////			failed = true;
+////			ghost_set_txn_state(cpu, state);
+////			__cpumask_clear_cpu(cpu, cpumask);
+////		} else {
+////			if (resched) {
+////				VM_BUG_ON(!need_rendezvous);
+////				if (cpu == this_cpu)
+////					local_resched = true;
+////				else
+////					__cpumask_set_cpu(cpu, ipimask);
+////			}
+////
+////			if (need_rendezvous)
+////				__cpumask_set_cpu(cpu, rendmask);
+////		}
+////	}
+////
+////	/*
+////	 * Send resched IPI to CPUs that traverse the need_resched edge (0->1).
+////	 *
+////	 * _ghost_commit_txn() assumes that if need_resched is set then an IPI
+////	 * must have been already sent.
+////	 */
+////	ghost_send_reschedule(ipimask);
+////
+////	/*
+////	 * The overall sync_group failed but we may have successfully updated
+////	 * scheduling state on a subset of CPUs. Poison 'target' to get these
+////	 * cpus to reschedule immediately after reaching rendezvous.
+////	 */
+////	if (failed)
+////		target |= GHOST_POISONED_RENDEZVOUS;
+////
+////	for_each_cpu(cpu, rendmask)
+////		ghost_reached_rendezvous(cpu, target);
+////
+////	state = failed ? GHOST_TXN_POISONED : GHOST_TXN_COMPLETE;
+////	for_each_cpu(cpu, cpumask) {
+////		struct ghost_txn *txn = _ghost_get_txn_ptr(cpu);
+////
+////		if (!txn) {
+////			/*
+////			 * We've committed, but the cpu has since been removed
+////			 * from the enclave.  Possibly it's destroyed.
+////			 */
+////			continue;
+////		}
+////		_ghost_set_txn_state(txn, state);
+////		if (!failed) {
+////			/*
+////			 * Release ownership in case we end up scheduling on
+////			 * this cpu (thus precluding the agent from doing so
+////			 * itself). When control eventually returns to the
+////			 * agent the return value can be used to detect a
+////			 * successful commit.
+////			 *
+////			 * N.B. even though not strictly necessary the txn
+////			 * ownership is released even if the local cpu is
+////			 * not scheduling. This is intentional to keep the
+////			 * userspace code consistent (it doesn't need to
+////			 * distinguish between local/remote sync commits).
+////			 */
+////			smp_store_release(&txn->u.sync_group_owner, -1);
+////		} else {
+////			/*
+////			 * The commit failed but the agent retains ownership
+////			 * of the transactions in the sync_group. The agent
+////			 * can release ownership after it has inspected the
+////			 * reason for failure.
+////			 */
+////		}
+////	}
+////
+////	rcu_read_unlock();
+////
+////	/* Reschedule (potentially switching to 'latched_task'). */
+////	if (local_resched) {
+////		WARN_ON_ONCE(failed);
+////		ghost_agent_schedule();
+////	}
+////
+////	WARN_ON_ONCE(this_rq()->ghost.blocked_in_run);
+////
+////	preempt_enable_no_resched();
+////	free_cpumask_var(cpumask);
+////	free_cpumask_var(ipimask);
+////	free_cpumask_var(rendmask);
+////	return !failed;
+////}
+//
+////int ioctl_ghost_commit_txn(struct ghost_enclave *e,
+//int ioctl_ghost_commit_txn(
+//			  struct ghost_ioc_commit_txn __user *arg)
+//{
+//	int error, state;
+//	int cpu, this_cpu;
+//	int failed_commits = 0;
+//	bool local_resched = false;
+//	cpumask_var_t cpumask, ipimask;
+//
+//	ulong *user_mask_ptr;
+//	uint user_mask_len;
+//	int flags;
+//	struct ghost_ioc_commit_txn commit_txn;
+//
+//	const int valid_flags = 0;
+//
+//	if (copy_from_user(&commit_txn, arg,
+//			   sizeof(struct ghost_ioc_commit_txn)))
+//		return -EFAULT;
+//
+//	user_mask_ptr = commit_txn.mask_ptr;
+//	user_mask_len = commit_txn.mask_len;
+//	flags = commit_txn.flags;
+//
+//	if (flags & ~valid_flags)
+//		return -EINVAL;
+//
+//	if (!alloc_cpumask_var(&cpumask, GFP_KERNEL))
+//		return -ENOMEM;
+//
+//	error = get_user_cpu_mask(user_mask_ptr, user_mask_len, cpumask);
+//	if (error) {
+//		free_cpumask_var(cpumask);
+//		return error;
+//	}
+//
+//	if (!zalloc_cpumask_var(&ipimask, GFP_KERNEL)) {
+//		free_cpumask_var(cpumask);
+//		return -ENOMEM;
+//	}
+//
+//#ifdef notyet
+//	/* Restrict 'cpumask' to the current enclave. */
+//	//ghost_enclave_cpus_allowed(current, cpus_allowed);
+//	cpumask_and(cpumask, cpumask, cpus_allowed);
+//#endif
+//
+//	preempt_disable();
+//	this_cpu = raw_smp_processor_id();
+//
+//	rcu_read_lock();
+//	for_each_cpu_wrap(cpu, cpumask, this_cpu + 1) {
+//		int commit_flags;
+//		bool greedy_commit, inline_commit;
+//
+//		if (!_ghost_txn_ready(cpu, &commit_flags))
+//			continue;
+//
+//		greedy_commit = _ghost_txn_greedy(commit_flags);
+//		inline_commit = (commit_flags & COMMIT_AT_TXN_COMMIT);
+//
+//		if (cpu != this_cpu && !inline_commit) {
+//			/*
+//			 * Only send an IPI if transaction can be committed by
+//			 * the remote CPU. Notably this excludes transactions
+//			 * that must be committed in specific code paths (for
+//			 * e.g. COMMIT_AT_SCHEDULE used for a pre-staged txn).
+//			 */
+//			if (greedy_commit)
+//				__cpumask_set_cpu(cpu, ipimask);
+//
+//			continue;
+//		}
+//
+//		/*
+//		 * Agent wants us to commit a transaction whose 'commit_flags'
+//		 * indicate that it should be committed elsewhere (for e.g.
+//		 * COMMIT_AT_SCHEDULE for a pre-staged transaction).
+//		 */
+//		WARN_ONCE(!greedy_commit && !inline_commit,
+//			  "Unexpected txn->commit_flags %#x on cpu %d",
+//			  commit_flags, cpu);
+//
+//		/*
+//		 * Commit txn locally either because it targets 'this_cpu'
+//		 * or caller wants it committed inline.
+//		 */
+//		if (!ghost_claim_txn(cpu, -1)) {
+//			failed_commits++;
+//			continue;
+//		}
+//
+//		/*
+//		 * If there are failed commits then poison the local commit
+//		 * so we'll return from this syscall immediately (as opposed
+//		 * to switching to a task which would delay reaction to the
+//		 * failed commits).
+//		 *
+//		 * Note that for_each_cpu_wrap() guarantees that 'this_cpu'
+//		 * is the last cpu visited in the loop so 'failed_commits'
+//		 * is final.
+//		 */
+//		if (failed_commits > 0 && cpu == this_cpu) {
+//			ghost_poison_txn(cpu);
+//			continue;
+//		}
+//
+//		if (ghost_commit_txn(cpu, true, &state)) {
+//			WARN_ON_ONCE(!ghost_txn_succeeded(state));
+//			if (cpu == this_cpu)
+//				local_resched = true;
+//			else
+//				__cpumask_set_cpu(cpu, ipimask);
+//		} else if (!ghost_txn_succeeded(state)) {
+//			failed_commits++;
+//		} else {
+//			/* commit succeeded, resched not needed */
+//		}
+//	}
+//	rcu_read_unlock();
+//
+//	ghost_send_reschedule(ipimask);
+//
+//	/* Reschedule (potentially switching to 'latched_task'). */
+//	if (local_resched) {
+//		WARN_ON_ONCE(failed_commits);
+//		ghost_agent_schedule();
+//	}
+//
+//	WARN_ON_ONCE(this_rq()->ghost.blocked_in_run);
+//
+//	preempt_enable_no_resched();
+//	free_cpumask_var(cpumask);
+//	free_cpumask_var(ipimask);
+//	return 0;
+//}
 
 static int ghost_timerfd_validate(struct timerfd_ghost *timerfd_ghost)
 {
@@ -6605,8 +6606,8 @@ void ghost_switchto(struct rq *rq, struct task_struct *prev,
 void ghost_need_cpu_not_idle(struct rq *rq, struct task_struct *next,
 		struct task_struct *prev)
 {
-	if (cpu_deliver_msg_not_idle(rq, next, prev))
-		ghost_wake_agent_on(agent_target_cpu(rq));
+	//if (cpu_deliver_msg_not_idle(rq, next, prev))
+	//	ghost_wake_agent_on(agent_target_cpu(rq));
 }
 
 void ghost_cpu_idle(void)

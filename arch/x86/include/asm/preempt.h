@@ -95,7 +95,7 @@ static __always_inline bool __preempt_count_dec_and_test(void)
 }
 
 #ifdef CONFIG_SCHED_CLASS_GHOST
-extern void ghost_commit_greedy_txn(void);
+//extern void ghost_commit_greedy_txn(void);
 #endif
 
 /*
@@ -104,7 +104,7 @@ extern void ghost_commit_greedy_txn(void);
 static __always_inline bool should_resched(int preempt_offset)
 {
 #ifdef CONFIG_SCHED_CLASS_GHOST
-	ghost_commit_greedy_txn();
+	//ghost_commit_greedy_txn();
 #endif
 	return unlikely(raw_cpu_read_4(__preempt_count) == preempt_offset);
 }
