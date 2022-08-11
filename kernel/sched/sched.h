@@ -100,6 +100,8 @@ extern long calc_load_fold_active(struct rq *this_rq, long adjust);
 
 extern void call_trace_sched_update_nr_running(struct rq *rq, int count);
 
+extern int do_report_timing;
+
 #ifdef CONFIG_SCHED_CLASS_GHOST
 
 #include <uapi/linux/ghost.h>

@@ -155,6 +155,7 @@ int register_ghost_agent(struct ghost_agent_type *agent)
 {
 	int res = 0;
 	struct ghost_agent_type ** p;
+	do_report_timing = 20;
 
 	//if (agent->parameters &&
 	//    !fs_validate_description(fs->name, fs->parameters))
