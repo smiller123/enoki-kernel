@@ -64,10 +64,10 @@ static inline bool isalarm(struct timerfd_ctx *ctx)
 }
 
 #ifdef CONFIG_SCHED_CLASS_GHOST
-static inline bool timerfd_ghost_enabled(struct timerfd_ghost *timerfd_ghost)
-{
-	return timerfd_ghost->flags & TIMERFD_GHOST_ENABLED;
-}
+//static inline bool timerfd_ghost_enabled(struct timerfd_ghost *timerfd_ghost)
+//{
+//	return timerfd_ghost->flags & TIMERFD_GHOST_ENABLED;
+//}
 #endif
 
 /*
@@ -90,14 +90,14 @@ static void timerfd_triggered(struct timerfd_ctx *ctx)
 	ctx->ticks++;
 	wake_up_locked_poll(&ctx->wqh, EPOLLIN);
 #ifdef CONFIG_SCHED_CLASS_GHOST
-	if (unlikely(timerfd_ghost_enabled(&ctx->timerfd_ghost)))
-		timerfd_ghost = ctx->timerfd_ghost;
+//	if (unlikely(timerfd_ghost_enabled(&ctx->timerfd_ghost)))
+//		timerfd_ghost = ctx->timerfd_ghost;
 #endif
 	spin_unlock_irqrestore(&ctx->wqh.lock, flags);
 
 #ifdef CONFIG_SCHED_CLASS_GHOST
-	if (unlikely(timerfd_ghost_enabled(&timerfd_ghost)))
-		ghost_timerfd_triggered(&timerfd_ghost);
+	//if (unlikely(timerfd_ghost_enabled(&timerfd_ghost)))
+	//	ghost_timerfd_triggered(&timerfd_ghost);
 #endif
 }
 

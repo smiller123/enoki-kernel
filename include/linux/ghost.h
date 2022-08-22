@@ -26,14 +26,19 @@
 
 struct ghost_agent_type {
 	int policy;
-	void (*process_message) (int type, int msglen, uint32_t barrier,
+	const void *agent;
+	void (*process_message) (const void* agent, int type, int msglen, uint32_t barrier,
 			void *payload, int payload_size, int *retval);
 	struct module *owner;
 	struct ghost_agent_type * next;
 };
 
-extern int register_ghost_agent(struct ghost_agent_type *);
-extern int unregister_ghost_agent(struct ghost_agent_type *);
+extern int register_ghost_agent(
+		const void *agent,
+		int policy,
+		const void *process_message
+);
+extern int unregister_ghost_agent(int);
 
 struct enclave_work {
 	struct list_head link;

@@ -151,42 +151,55 @@ static struct ghost_agent_type **find_ghost_agent_fake(int policy)
 	return p;
 }
 
-int register_ghost_agent(struct ghost_agent_type *agent)
+int register_ghost_agent(const void *agent, int policy, const void* process_message)
 {
 	int res = 0;
 	struct ghost_agent_type ** p;
+	struct ghost_agent_type *agent_type;
+
+	agent_type = kzalloc(sizeof(struct ghost_agent_type), GFP_KERNEL);
+	agent_type->policy = policy;
+	agent_type->agent = agent;
+	agent_type->process_message = process_message;
+	agent_type->owner = (struct module *) 0;
+	agent_type->next = (struct ghost_agent_type *) 0;
 
 	//if (agent->parameters &&
 	//    !fs_validate_description(fs->name, fs->parameters))
 	//	return -EINVAL;
 
-	if (agent->next)
-		return -EBUSY;
+	//if (agent_type->next)
+	//	return -EBUSY;
 	write_lock(&ghost_agents_lock);
-	p = find_ghost_agent(agent->policy);
+	p = find_ghost_agent(policy);
 	if (*p)
 		res = -EBUSY;
 	else
-		*p = agent;
+		*p = agent_type;
 	write_unlock(&ghost_agents_lock);
-	printk(KERN_INFO "ghost agent name registered %d, ptr %p", agent->policy, agent);
+	printk(KERN_INFO "ghost agent name registered %d, ptr %p", policy, agent);
 	return res;
 }
 
 EXPORT_SYMBOL(register_ghost_agent);
 
-int unregister_ghost_agent(struct ghost_agent_type *agent)
+int unregister_ghost_agent(int policy)
 {
 	struct ghost_agent_type ** tmp;
+	printk(KERN_INFO "unregistering ghost agent");
 
 	write_lock(&ghost_agents_lock);
 	tmp = &ghost_agents;
+	printk(KERN_INFO "tmp %p %p", tmp, *tmp);
 	while (*tmp) {
-		if (agent == *tmp) {
-			*tmp = agent->next;
-			agent->next = NULL;
+		if (policy == (*tmp)->policy) {
+			*tmp = (*tmp)->next;
+			//agent->next = NULL;
 			write_unlock(&ghost_agents_lock);
 			synchronize_rcu();
+			printk(KERN_INFO "successfully unregistered ghost agent");
+			printk(KERN_INFO "new ptr %p", ghost_agents);
+			printk(KERN_INFO "random extra print");
 			return 0;
 		}
 		tmp = &(*tmp)->next;
@@ -941,7 +954,7 @@ static void task_tick_ghost(struct rq *rq, struct task_struct *p, int queued)
 
 	__update_curr_ghost(rq, false);
 
-	//if (cpu_deliver_msg_tick(rq, p))
+	cpu_deliver_msg_tick(rq, p);
 	//	ghost_wake_agent_on(agent_target_cpu(rq));
 }
 
@@ -4006,7 +4019,7 @@ static int _produce(uint32_t barrier, int type,
 	ret = 0;
 	if (agent_type && agent_type->process_message) {
 		//printk(KERN_INFO "calling message send");
-		agent_type->process_message(type, msglen, barrier, payload, payload_size, &ret);
+		agent_type->process_message(agent_type->agent, type, msglen, barrier, payload, payload_size, &ret);
 		//printk(KERN_INFO "got ret %d\n", ret);
 	}
 	rcu_read_unlock();
@@ -4185,21 +4198,21 @@ static inline bool cpu_deliver_msg_tick(struct rq *rq, struct task_struct *p)
 }
 
 /* Returns true if MSG_CPU_TIMER_EXPIRED was produced and false otherwise */
-static inline bool cpu_deliver_timer_expired(struct rq *rq, uint64_t cookie,
-		struct task_struct *p)
-{
-	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
-	struct ghost_msg_payload_timer *payload = &msg->timer;
-
-	if (cpu_skip_message(rq))
-		return false;
-
-	msg->type = MSG_CPU_TIMER_EXPIRED;
-	payload->cpu = cpu_of(rq);
-	payload->cookie = cookie;
-
-	return !produce_for_task(p, msg);
-}
+//static inline bool cpu_deliver_timer_expired(struct rq *rq, uint64_t cookie,
+//		struct task_struct *p)
+//{
+//	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+//	struct ghost_msg_payload_timer *payload = &msg->timer;
+//
+//	if (cpu_skip_message(rq))
+//		return false;
+//
+//	msg->type = MSG_CPU_TIMER_EXPIRED;
+//	payload->cpu = cpu_of(rq);
+//	payload->cookie = cookie;
+//
+//	return !produce_for_agent_type(p, msg);
+//}
 
 static bool cpu_deliver_msg_not_idle(struct rq *rq, struct task_struct *next,
 		struct task_struct *prev)
@@ -4212,7 +4225,8 @@ static bool cpu_deliver_msg_not_idle(struct rq *rq, struct task_struct *next,
 
 	msg->type = MSG_CPU_NOT_IDLE;
 	payload->cpu = cpu_of(rq);
-	payload->next_gtid = gtid(next);
+	payload->next_pid = next->pid;
+	//payload->next_gtid = gtid(next);
 
 	return !produce_for_task(prev, msg);
 }
@@ -4345,7 +4359,8 @@ static void task_deliver_msg_yield(struct rq *rq, struct task_struct *p)
 		return;
 
 	msg->type = MSG_TASK_YIELD;
-	payload->gtid = gtid(p);
+	//payload->gtid = gtid(p);
+	payload->pid = p->pid;
 	payload->runtime = p->se.sum_exec_runtime;
 	payload->cpu = cpu_of(rq);
 	payload->cpu_seqnum = ++rq->ghost.cpu_seqnum;
@@ -4419,7 +4434,8 @@ static void task_deliver_msg_dead(struct rq *rq, struct task_struct *p)
 		return;
 
 	msg->type = MSG_TASK_DEAD;
-	payload->gtid = gtid(p);
+	//payload->gtid = gtid(p);
+	payload->pid = p->pid;
 	produce_for_task(p, msg);
 }
 
@@ -4432,7 +4448,8 @@ static void task_deliver_msg_departed(struct rq *rq, struct task_struct *p)
 		return;
 
 	msg->type = MSG_TASK_DEPARTED;
-	payload->gtid = gtid(p);
+	//payload->gtid = gtid(p);
+	payload->pid = p->pid;
 	payload->cpu = cpu_of(rq);
 	payload->cpu_seqnum = ++rq->ghost.cpu_seqnum;
 	if (task_current(rq, p) && ghost_in_switchto(rq))
@@ -4464,7 +4481,8 @@ static void task_deliver_msg_affinity_changed(struct rq *rq,
 		return;
 
 	msg->type = MSG_TASK_AFFINITY_CHANGED;
-	payload->gtid = gtid(p);
+	//payload->gtid = gtid(p);
+	payload->pid = p->pid;
 
 	produce_for_task(p, msg);
 }
@@ -4479,7 +4497,8 @@ static void task_deliver_msg_latched(struct rq *rq, struct task_struct *p,
 		return;
 
 	msg->type = MSG_TASK_LATCHED;
-	payload->gtid = gtid(p);
+	//payload->gtid = gtid(p);
+	payload->pid = p->pid;
 	payload->commit_time = ktime_get_ns();
 	payload->cpu = cpu_of(rq);
 	payload->cpu_seqnum = ++rq->ghost.cpu_seqnum;
@@ -4531,7 +4550,8 @@ static void task_deliver_msg_switchto(struct rq *rq, struct task_struct *p)
 		return;
 
 	msg->type = MSG_TASK_SWITCHTO;
-	payload->gtid = gtid(p);
+	//payload->gtid = gtid(p);
+	payload->pid = p->pid;
 	payload->runtime = p->se.sum_exec_runtime;
 	payload->cpu = cpu_of(rq);
 	payload->cpu_seqnum = ++rq->ghost.cpu_seqnum;
@@ -6396,97 +6416,97 @@ int ghost_run_gtid_on_check(gtid_t gtid, u32 task_barrier, int run_flags,
 //	return 0;
 //}
 
-static int ghost_timerfd_validate(struct timerfd_ghost *timerfd_ghost)
-{
-	int cpu;
-	struct rq *rq;
-	struct rq_flags rf;
-	const int valid_flags = TIMERFD_GHOST_ENABLED;
-
-	if (timerfd_ghost->flags & ~valid_flags)
-		return -EINVAL;
-
-	/* ghost interaction disabled for this timerfd */
-	if (!(timerfd_ghost->flags & TIMERFD_GHOST_ENABLED))
-		return 0;
-
-	cpu = timerfd_ghost->cpu;
-	if (cpu < 0 || cpu >= nr_cpu_ids || !cpu_online(cpu))
-		return -EINVAL;
-
-	rq = cpu_rq(cpu);
-	rq_lock_irqsave(rq, &rf);
-
-	if (!rq->ghost.agent || !same_process(rq->ghost.agent, current)) {
-		rq_unlock_irqrestore(rq, &rf);
-		return -EINVAL;
-	}
-
-	rq_unlock_irqrestore(rq, &rf);
-	return 0;
-}
-
-/* fs/timerfd.c */
-int do_timerfd_settime(int ufd, int flags, const struct itimerspec64 *new,
-		       struct itimerspec64 *old, struct timerfd_ghost *tfdl);
-
-int ghost_timerfd_settime(struct ghost_ioc_timerfd_settime __user *arg)
-{
-	struct itimerspec64 new, old;
-	int ret;
-
-	int timerfd, flags;
-	const struct __kernel_itimerspec *itmr;
-	struct __kernel_itimerspec *otmr;
-	struct timerfd_ghost timerfd_ghost;
-	struct ghost_ioc_timerfd_settime settime_data;
-
-	if (copy_from_user(&settime_data, arg,
-			   sizeof(struct ghost_ioc_timerfd_settime)))
-		return -EFAULT;
-
-	timerfd = settime_data.timerfd;
-	flags = settime_data.flags;
-	itmr = settime_data.in_tmr;
-	otmr = settime_data.out_tmr;
-	timerfd_ghost = settime_data.timerfd_ghost;
-
-	if (get_itimerspec64(&new, itmr))
-		return -EFAULT;
-
-	ret = ghost_timerfd_validate(&timerfd_ghost);
-	if (ret)
-		return ret;
-
-	ret = do_timerfd_settime(timerfd, flags, &new, &old, &timerfd_ghost);
-	if (ret)
-		return ret;
-
-	if (otmr && put_itimerspec64(&old, otmr))
-		return -EFAULT;
-
-	return ret;
-}
-
-/* Called from timerfd_triggered() on timer expiry */
-void ghost_timerfd_triggered(struct timerfd_ghost *timerfd_ghost)
-{
-	struct rq *rq;
-	struct rq_flags rf;
-	int cpu = timerfd_ghost->cpu;
-
-	if (WARN_ON_ONCE(cpu < 0 || cpu >= nr_cpu_ids || !cpu_online(cpu)))
-		return;
-
-	rq = cpu_rq(cpu);
-	rq_lock_irqsave(rq, &rf);
-
-	// TODO: maybe put this back?
-	//if (cpu_deliver_timer_expired(rq, timerfd_ghost->cookie, p))
-	//	ghost_wake_agent_on(agent_target_cpu(rq));
-
-	rq_unlock_irqrestore(rq, &rf);
-}
+//static int ghost_timerfd_validate(struct timerfd_ghost *timerfd_ghost)
+//{
+//	int cpu;
+//	struct rq *rq;
+//	struct rq_flags rf;
+//	const int valid_flags = TIMERFD_GHOST_ENABLED;
+//
+//	if (timerfd_ghost->flags & ~valid_flags)
+//		return -EINVAL;
+//
+//	/* ghost interaction disabled for this timerfd */
+//	if (!(timerfd_ghost->flags & TIMERFD_GHOST_ENABLED))
+//		return 0;
+//
+//	cpu = timerfd_ghost->cpu;
+//	if (cpu < 0 || cpu >= nr_cpu_ids || !cpu_online(cpu))
+//		return -EINVAL;
+//
+//	rq = cpu_rq(cpu);
+//	rq_lock_irqsave(rq, &rf);
+//
+//	if (!rq->ghost.agent || !same_process(rq->ghost.agent, current)) {
+//		rq_unlock_irqrestore(rq, &rf);
+//		return -EINVAL;
+//	}
+//
+//	rq_unlock_irqrestore(rq, &rf);
+//	return 0;
+//}
+//
+///* fs/timerfd.c */
+//int do_timerfd_settime(int ufd, int flags, const struct itimerspec64 *new,
+//		       struct itimerspec64 *old, struct timerfd_ghost *tfdl);
+//
+//int ghost_timerfd_settime(struct ghost_ioc_timerfd_settime __user *arg)
+//{
+//	struct itimerspec64 new, old;
+//	int ret;
+//
+//	int timerfd, flags;
+//	const struct __kernel_itimerspec *itmr;
+//	struct __kernel_itimerspec *otmr;
+//	struct timerfd_ghost timerfd_ghost;
+//	struct ghost_ioc_timerfd_settime settime_data;
+//
+//	if (copy_from_user(&settime_data, arg,
+//			   sizeof(struct ghost_ioc_timerfd_settime)))
+//		return -EFAULT;
+//
+//	timerfd = settime_data.timerfd;
+//	flags = settime_data.flags;
+//	itmr = settime_data.in_tmr;
+//	otmr = settime_data.out_tmr;
+//	timerfd_ghost = settime_data.timerfd_ghost;
+//
+//	if (get_itimerspec64(&new, itmr))
+//		return -EFAULT;
+//
+//	ret = ghost_timerfd_validate(&timerfd_ghost);
+//	if (ret)
+//		return ret;
+//
+//	ret = do_timerfd_settime(timerfd, flags, &new, &old, &timerfd_ghost);
+//	if (ret)
+//		return ret;
+//
+//	if (otmr && put_itimerspec64(&old, otmr))
+//		return -EFAULT;
+//
+//	return ret;
+//}
+//
+///* Called from timerfd_triggered() on timer expiry */
+//void ghost_timerfd_triggered(struct timerfd_ghost *timerfd_ghost)
+//{
+//	struct rq *rq;
+//	struct rq_flags rf;
+//	int cpu = timerfd_ghost->cpu;
+//
+//	if (WARN_ON_ONCE(cpu < 0 || cpu >= nr_cpu_ids || !cpu_online(cpu)))
+//		return;
+//
+//	rq = cpu_rq(cpu);
+//	rq_lock_irqsave(rq, &rf);
+//
+//	// TODO: maybe put this back?
+//	cpu_deliver_timer_expired(rq, timerfd_ghost->cookie, p);
+//	//	ghost_wake_agent_on(agent_target_cpu(rq));
+//
+//	rq_unlock_irqrestore(rq, &rf);
+//}
 
 static int ghost_gtid_lookup(int64_t id, int op, int flags, int64_t __user *out)
 {
@@ -6606,7 +6626,7 @@ void ghost_switchto(struct rq *rq, struct task_struct *prev,
 void ghost_need_cpu_not_idle(struct rq *rq, struct task_struct *next,
 		struct task_struct *prev)
 {
-	//if (cpu_deliver_msg_not_idle(rq, next, prev))
+	cpu_deliver_msg_not_idle(rq, next, prev);
 	//	ghost_wake_agent_on(agent_target_cpu(rq));
 }
 

@@ -277,7 +277,7 @@ struct ghost_msg_payload_task_preempt {
 };
 
 struct ghost_msg_payload_task_yield {
-	uint64_t gtid;
+	uint64_t pid;
 	uint64_t runtime;	/* cumulative runtime in ns */
 	uint64_t cpu_seqnum;
 	uint64_t agent_data;	/* used by bpf */
@@ -295,11 +295,11 @@ struct ghost_msg_payload_task_blocked {
 };
 
 struct ghost_msg_payload_task_dead {
-	uint64_t gtid;
+	uint64_t pid;
 };
 
 struct ghost_msg_payload_task_departed {
-	uint64_t gtid;
+	uint64_t pid;
 	uint64_t cpu_seqnum;
 	int cpu;
 	char from_switchto;
@@ -307,7 +307,7 @@ struct ghost_msg_payload_task_departed {
 };
 
 struct ghost_msg_payload_task_affinity_changed {
-	uint64_t gtid;
+	uint64_t pid;
 };
 
 struct ghost_msg_payload_task_wakeup {
@@ -332,14 +332,14 @@ struct ghost_msg_payload_task_wakeup {
 };
 
 struct ghost_msg_payload_task_switchto {
-	uint64_t gtid;
+	uint64_t pid;
 	uint64_t runtime;	/* cumulative runtime in ns */
 	uint64_t cpu_seqnum;
 	int cpu;
 };
 
 struct ghost_msg_payload_task_latched {
-	uint64_t gtid;
+	uint64_t pid;
 	uint64_t commit_time;
 	uint64_t cpu_seqnum;
 	int cpu;
@@ -348,7 +348,7 @@ struct ghost_msg_payload_task_latched {
 
 struct ghost_msg_payload_cpu_not_idle {
 	int cpu;
-	uint64_t next_gtid;
+	uint64_t next_pid;
 };
 
 struct ghost_msg_payload_cpu_tick {
