@@ -28,6 +28,9 @@
 #include "pelt.h"
 #include "smp.h"
 
+#include <linux/time64.h>
+#include <linux/timekeeping.h>
+
 /*
  * Export tracepoints that act as a bare tracehook (ie: have no trace event
  * associated with them) to allow external modules to probe them.
@@ -80,6 +83,8 @@ __read_mostly int scheduler_running;
  * default: 0.95s
  */
 int sysctl_sched_rt_runtime = 950000;
+
+int do_report_timing = 0;
 
 
 /*
@@ -4555,7 +4560,11 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	//printk(KERN_INFO "context_switch next %p\n", next);
 	//printk(KERN_INFO "context_switch rf %p\n", rf);
 	//}
+	struct timespec64 start;
+	ktime_get_real_ts64(&start);
 	prepare_task_switch(rq, prev, next);
+	struct timespec64 step1;
+	ktime_get_real_ts64(&step1);
 
 	/*
 	 * For paravirt, this is coupled with an exit in switch_to to
@@ -4627,6 +4636,8 @@ context_switch(struct rq *rq, struct task_struct *prev,
 		//printk(KERN_INFO "context_switch 5 rf %p\n", rf);
 		//}
 	}
+	struct timespec64 step2;
+	ktime_get_real_ts64(&step2);
 	//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
 	//printk(KERN_INFO "context_switch 6 rq %p\n", rq);
 	//printk(KERN_INFO "context_switch 6 prev %p\n", prev);
@@ -4637,9 +4648,13 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
 
 	prepare_lock_switch(rq, next, rf);
+	struct timespec64 step21;
+	ktime_get_real_ts64(&step21);
 
 	/* Here we just switch the register state and the stack. */
 	switch_to(prev, next, prev);
+	struct timespec64 step22;
+	ktime_get_real_ts64(&step22);
 	barrier();
 	//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
 	//printk(KERN_INFO "context_switch 7 rq %p\n", rq);
@@ -4647,14 +4662,36 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	//printk(KERN_INFO "context_switch 7 next %p\n", next);
 	//printk(KERN_INFO "context_switch 7 rf %p\n", rf);
 	//}
+	struct timespec64 step3;
+	ktime_get_real_ts64(&step3);
 
 	ret = finish_task_switch(prev);
+	struct timespec64 end;
 	//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
 	//printk(KERN_INFO "context_switch end rq %p\n", rq);
 	//printk(KERN_INFO "context_switch end prev %p\n", prev);
 	//printk(KERN_INFO "context_switch end next %p\n", next);
 	//printk(KERN_INFO "context_switch end rf %p\n", rf);
 	//}
+	if (do_report_timing > 0) {
+		ktime_get_real_ts64(&end);
+		struct timespec64 diff = timespec64_sub(end, start);
+		struct timespec64 diff1 = timespec64_sub(step1, start);
+		struct timespec64 diff2 = timespec64_sub(step2, step1);
+		struct timespec64 diff3 = timespec64_sub(step21, step2);
+		struct timespec64 diff4 = timespec64_sub(step22, step21);
+		struct timespec64 diff5 = timespec64_sub(step3, step22);
+		struct timespec64 diff6 = timespec64_sub(end, step3);
+		s64 ns_diff = timespec64_to_ns(&diff);
+		s64 ns_diff1 = timespec64_to_ns(&diff1);
+		s64 ns_diff2 = timespec64_to_ns(&diff2);
+		s64 ns_diff3 = timespec64_to_ns(&diff3);
+		s64 ns_diff4 = timespec64_to_ns(&diff4);
+		s64 ns_diff5 = timespec64_to_ns(&diff5);
+		s64 ns_diff6 = timespec64_to_ns(&diff6);
+		printk(KERN_INFO "context_switch diff %d, %d %d %d %d %d %d\n", ns_diff, ns_diff1, ns_diff2, ns_diff3, ns_diff4, ns_diff5, ns_diff6);
+		//do_report_timing = false;
+	}
 	return ret;
 }
 
@@ -5324,6 +5361,8 @@ static void __sched notrace __schedule(bool preempt)
 	struct rq_flags rf;
 	struct rq *rq;
 	int cpu;
+	struct timespec64 start, end;
+	ktime_get_real_ts64(&start);
 
 	cpu = smp_processor_id();
 	rq = cpu_rq(cpu);
@@ -5401,12 +5440,21 @@ static void __sched notrace __schedule(bool preempt)
 		}
 		switch_count = &prev->nvcsw;
 	}
+	struct timespec64 step1;
+	ktime_get_real_ts64(&step1);
 
 	next = pick_next_task(rq, prev, &rf);
 	clear_tsk_need_resched(prev);
 	clear_preempt_need_resched();
+	struct timespec64 step2;
+	ktime_get_real_ts64(&step2);
+	struct timespec64 step3;
+	struct timespec64 step4;
 
 	if (likely(prev != next)) {
+		if (do_report_timing > 0) {
+			printk(KERN_INFO "switching\n");
+		}
 		rq->nr_switches++;
 		/*
 		 * RCU users of rcu_dereference(rq->curr) may not see
@@ -5435,8 +5483,13 @@ static void __sched notrace __schedule(bool preempt)
 		trace_sched_switch(preempt, prev, next);
 
 		/* Also unlocks the rq: */
+		ktime_get_real_ts64(&step3);
 		rq = context_switch(rq, prev, next, &rf);
+		ktime_get_real_ts64(&step4);
 	} else {
+		if (do_report_timing > 0) {
+			printk(KERN_INFO "not switching\n");
+		}
 		rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
 
 		rq_unpin_lock(rq, &rf);
@@ -5444,6 +5497,24 @@ static void __sched notrace __schedule(bool preempt)
 		raw_spin_unlock_irq(&rq->lock);
 	}
 	schedule_callback(rq);
+	if (do_report_timing > 0) {
+		ktime_get_real_ts64(&end);
+		struct timespec64 diff = timespec64_sub(end, start);
+		struct timespec64 diff1 = timespec64_sub(step1, start);
+		struct timespec64 diff2 = timespec64_sub(step2, step1);
+		struct timespec64 diff3 = timespec64_sub(step3, step2);
+		struct timespec64 diff4 = timespec64_sub(step4, step3);
+		struct timespec64 diff5 = timespec64_sub(end, step4);
+		s64 ns_diff = timespec64_to_ns(&diff);
+		s64 ns_diff1 = timespec64_to_ns(&diff1);
+		s64 ns_diff2 = timespec64_to_ns(&diff2);
+		s64 ns_diff3 = timespec64_to_ns(&diff3);
+		s64 ns_diff4 = timespec64_to_ns(&diff4);
+		s64 ns_diff5 = timespec64_to_ns(&diff5);
+		printk(KERN_INFO "diff %d, %d %d %d %d %d \n", ns_diff, ns_diff1, ns_diff2, ns_diff3, ns_diff4, ns_diff5);
+		do_report_timing -= 1;
+		//do_report_timing = false;
+	}
 }
 
 void __noreturn do_task_dead(void)
