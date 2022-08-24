@@ -249,12 +249,15 @@ enum {
 	MSG_TASK_SWITCHTO,
 	MSG_TASK_AFFINITY_CHANGED,
 	MSG_TASK_LATCHED,
+	MSG_TASK_SELECT_RQ,
+	MSG_TASK_MIGRATE_RQ,
 
 	/* cpu messages */
 	MSG_CPU_TICK		= _MSG_CPU_FIRST,
 	MSG_CPU_TIMER_EXPIRED,
 	MSG_CPU_NOT_IDLE,	/* requested via run_flags: NEED_CPU_NOT_IDLE */
 	MSG_PNT,
+	MSG_BALANCE,
 };
 
 /* TODO: Move payload to header once all clients updated. */
@@ -364,6 +367,18 @@ struct ghost_msg_payload_pnt {
 	int cpu;
 };
 
+struct ghost_msg_payload_select_task_rq {
+	uint64_t pid;
+};
+
+struct ghost_msg_payload_migrate_task_rq {
+	uint64_t pid;
+	int new_cpu;
+};
+
+struct ghost_msg_payload_balance {
+};
+
 struct bpf_ghost_msg {
 	union {
 		struct ghost_msg_payload_task_dead	dead;
@@ -380,6 +395,9 @@ struct bpf_ghost_msg {
 		struct ghost_msg_payload_timer		timer;
 		struct ghost_msg_payload_cpu_not_idle	cpu_not_idle;
 		struct ghost_msg_payload_pnt		pnt;
+		struct ghost_msg_payload_select_task_rq select;
+		struct ghost_msg_payload_migrate_task_rq migrate;
+		struct ghost_msg_payload_balance	balance;
 	};
 	uint16_t type;
 	uint32_t seqnum;

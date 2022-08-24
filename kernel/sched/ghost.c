@@ -81,6 +81,10 @@ static void task_deliver_msg_departed(struct rq *rq, struct task_struct *p);
 static void task_deliver_msg_wakeup(struct rq *rq, struct task_struct *p);
 static void task_deliver_msg_latched(struct rq *rq, struct task_struct *p,
 				     bool latched_preempt);
+static int balance_ghost(struct rq *rq, struct task_struct *prev,
+			 struct rq_flags *rf);
+static void migrate_task_rq_ghost(struct task_struct *p, int new_cpu);
+static int select_task_rq_ghost(struct task_struct *p, int cpu, int wake_flags);
 static bool cpu_deliver_msg_tick(struct rq *rq, struct task_struct *p);
 static int cpu_deliver_msg_pnt(struct rq *rq, struct ghost_agent_type *agent_type);
 static int task_target_cpu(struct task_struct *p);
@@ -100,6 +104,8 @@ struct rq *context_switch(struct rq *rq, struct task_struct *prev,
 
 void schedule_callback(struct rq *rq);
 struct rq *move_queued_task(struct rq *rq, struct rq_flags *rf,
+			    struct task_struct *p, int new_cpu);
+struct rq *move_queued_task_fake(struct rq *rq, struct rq_flags *rf,
 			    struct task_struct *p, int new_cpu);
 
 //static void __enclave_remove_task(struct ghost_enclave *e,
@@ -193,11 +199,11 @@ int unregister_ghost_agent(int policy)
 	printk(KERN_INFO "tmp %p %p", tmp, *tmp);
 	while (*tmp) {
 		if (policy == (*tmp)->policy) {
+			printk(KERN_INFO "unregistering ghost agent %p", (*tmp)->agent);
 			*tmp = (*tmp)->next;
 			//agent->next = NULL;
 			write_unlock(&ghost_agents_lock);
 			synchronize_rcu();
-			printk(KERN_INFO "successfully unregistered ghost agent");
 			printk(KERN_INFO "new ptr %p", ghost_agents);
 			printk(KERN_INFO "random extra print");
 			return 0;
@@ -468,8 +474,8 @@ static inline uint32_t task_barrier_get(struct task_struct *p)
 {
 	struct rq *rq = task_rq(p);
 
-	lockdep_assert_held(&rq->lock);
-	VM_BUG_ON(is_agent(rq, p));
+	//lockdep_assert_held(&rq->lock);
+	//VM_BUG_ON(is_agent(rq, p));
 	//VM_BUG_ON(!p->ghost.status_word);
 
 	// TODO: Figure out what this should actually be
@@ -481,7 +487,7 @@ static inline uint32_t agent_barrier_get(struct task_struct *agent)
 	//struct ghost_status_word *sw = agent->ghost.status_word;
 	struct rq *rq = task_rq(agent);
 
-	lockdep_assert_held(&rq->lock);
+	//lockdep_assert_held(&rq->lock);
 	//VM_BUG_ON(!is_agent(rq, agent));
 	//VM_BUG_ON(!agent->ghost.status_word);
 
@@ -958,85 +964,7 @@ static void task_tick_ghost(struct rq *rq, struct task_struct *p, int queued)
 	//	ghost_wake_agent_on(agent_target_cpu(rq));
 }
 
-static int balance_ghost(struct rq *rq, struct task_struct *prev,
-			 struct rq_flags *rf)
-{
 
-	//struct task_struct *agent = rq->ghost.agent;
-
-	//if (!agent || !agent->on_rq)
-		return 0;
-
-	/*
-	 * Try to commit a ready txn iff:
-	 * - there is no higher priority runnable task.
-	 * - there is no 'latched_task'
-	 */
-	//if (!rq->ghost.latched_task && !rq_adj_nr_running(rq) &&
-	//    ghost_txn_ready(cpu_of(rq))) {
-	//	rq_unpin_lock(rq, rf);
-	//	raw_spin_unlock(&rq->lock);
-
-	//	ghost_commit_pending_txn(COMMIT_AT_SCHEDULE);
-
-	//	raw_spin_lock(&rq->lock);
-	//	rq_repin_lock(rq, rf);
-	//}
-
-	//if (!rq->ghost.latched_task && rq->ghost.pnt_bpf_once) {
-	//	rq->ghost.pnt_bpf_once = false;
-	//	/* If there is a BPF program, this will unlock the RQ */
-	//	rq->ghost.in_pnt_bpf = true;
-	//	//ghost_bpf_pnt(agent->ghost.enclave, rq, rf);
-	//	rq->ghost.in_pnt_bpf = false;
-	//}
-
-	///*
-	// * We have something to run in 'latched_task' or a higher priority
-	// * sched_class became runnable while the rq->lock was dropped.
-	// */
-	//return rq->ghost.latched_task || rq_adj_nr_running(rq);
-}
-
-static int select_task_rq_ghost(struct task_struct *p, int cpu, int wake_flags)
-{
-	int waker_cpu = smp_processor_id();
-
-	/* For anything but wake ups, just return the task_cpu */
-	if (!(wake_flags & (WF_TTWU | WF_FORK)))
-		return task_cpu(p);
-
-	/*
-	 * We have at least a couple of obvious choices here:
-	 *
-	 * 1. Keep the task on the same CPU it last ran on:
-	 *    This is good because it doesn't migrate the task unbeknownst
-	 *    to the agent but on the flip side we pay the cost of an IPI
-	 *    if the waking CPU is different than task_cpu(p).
-	 *
-	 * 2. Migrate the task to the waking CPU:
-	 *    This is good because we don't need an IPI to do the wakeup
-	 *    but on the flip side this may end up being a pessimistic
-	 *    choice when the agent actually schedules the task.
-	 *
-	 *    For e.g. if the waking cpu is in a different NUMA domain
-	 *    than where the agent later schedules the task then we'll
-	 *    pay the cost of task_rq_lock() across sockets which is
-	 *    exactly what ttwu_queue_remote() aims to minimize.
-	 *
-	 * This can be configured using 'p->ghost.enclave->wake_on_waker_cpu'
-	 * and the default is to keep the task on the same CPU it last ran on.
-	 */
-	//if (READ_ONCE(p->ghost.enclave->wake_on_waker_cpu))
-	//	p->ghost.twi.wake_up_cpu = waker_cpu;
-	//else
-	//	p->ghost.twi.wake_up_cpu = task_cpu(p);
-
-	p->ghost.twi.waker_cpu = waker_cpu;
-	p->ghost.twi.last_ran_cpu = task_cpu(p);
-
-	return p->ghost.twi.wake_up_cpu;
-}
 
 static inline bool task_is_dead(struct rq *rq, struct task_struct *p)
 {
@@ -1478,21 +1406,26 @@ static struct task_struct *pick_next_task_ghost(struct rq *rq)
 	for (p = ghost_agents; p; p = p->next) {
 		pid_ret = cpu_deliver_msg_pnt(rq, p);
 		if (pid_ret > 0) {
-			//struct rq *old_rq;
-			//struct rq_flags rf;
 			//printk(KERN_INFO "got %d from pnt, cpu %d\n", pid_ret, rq->cpu);
 			next = find_task_by_pid_ns(pid_ret, &init_pid_ns);
 			//printk(KERN_INFO "about to lock task rq\n");
-			//old_rq = task_rq_lock(next, &rf);
 			//if (unlikely(task_cpu(next) != rq->cpu)) {
+			//	struct rq *old_rq;
+			//	struct rq_flags rf;
+			//	//old_rq = task_rq_lock(next, &rf);
+			//	printk(KERN_INFO "moving task, running %d, queued %d",
+			//			task_running(rq, next),
+			//			!task_on_rq_queued(next));
 			//	//VM_BUG_ON(task_running(rq, next));
 			//	//VM_BUG_ON(!task_on_rq_queued(next));
-			//	update_rq_clock(old_rq);
-			//	move_queued_task(old_rq, &rf, next, rq->cpu);
-			//} else {
-			//	invalidate_cached_tasks(old_rq, next);
+			//	//update_rq_clock(old_rq);
+			//	//move_queued_task_fake(old_rq, &rf, next, rq->cpu);
+			//	//rq_unlock(rq, &rf);
+			////} else {
+			////	invalidate_cached_tasks(old_rq, next);
+			//	//task_rq_unlock(rq, next, &rf);
+			//	return NULL;
 			//}
-			//task_rq_unlock(old_rq, next, &rf);
 			//rcu_read_unlock();
 			goto done;
 		}
@@ -1690,6 +1623,7 @@ DEFINE_SCHED_CLASS(ghost) = {
 #ifdef CONFIG_SMP
 	.balance		= balance_ghost,
 	.select_task_rq		= select_task_rq_ghost,
+	.migrate_task_rq	= migrate_task_rq_ghost,
 	.task_woken		= task_woken_ghost,
 	.set_cpus_allowed	= set_cpus_allowed_ghost,
 #endif
@@ -4111,6 +4045,18 @@ static inline int __produce_for_task(struct ghost_agent_type *agent_type,
 		payload = &msg->pnt;
 		payload_size = sizeof(msg->pnt);
 		break;
+	case MSG_TASK_SELECT_RQ:
+		payload = &msg->select;
+		payload_size = sizeof(msg->select);
+		break;
+	case MSG_TASK_MIGRATE_RQ:
+		payload = &msg->migrate;
+		payload_size = sizeof(msg->migrate);
+		break;
+	case MSG_BALANCE:
+		payload = &msg->balance;
+		payload_size = sizeof(msg->balance);
+		break;
 	default:
 		WARN(1, "unknown bpg_ghost_msg type %d!\n", msg->type);
 		return -EINVAL;
@@ -4131,14 +4077,124 @@ static inline int produce_for_task(struct task_struct *p,
 	return __produce_for_task(p->ghost.agent_type, msg, task_barrier_get(p));
 }
 
-static inline int produce_for_agent(struct rq *rq,
-				    struct bpf_ghost_msg *msg)
-{
-	struct task_struct *agent = rq->ghost.agent;
+static void migrate_task_rq_ghost(struct task_struct *p, int new_cpu) {
+	struct rq *rq = task_rq(p);
+	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct ghost_msg_payload_migrate_task_rq *payload = &msg->migrate;
 
-	agent_barrier_inc(rq);
-	return __produce_for_task(agent->ghost.agent_type, msg, agent_barrier_get(agent));
+	msg->type = MSG_TASK_MIGRATE_RQ;
+	payload->pid = p->pid;
+	payload->new_cpu = new_cpu;
+	produce_for_task(p, msg);
 }
+
+static int select_task_rq_ghost(struct task_struct *p, int cpu, int wake_flags)
+{
+	struct rq_flags rf;
+	int waker_cpu = smp_processor_id();
+	int new_cpu;
+	struct rq *rq = task_rq(p);
+	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct ghost_msg_payload_select_task_rq *payload = &msg->select;
+
+	/* For anything but wake ups, just return the task_cpu */
+	if (!(wake_flags & (WF_TTWU | WF_FORK)))
+		return task_cpu(p);
+
+	/*
+	 * We have at least a couple of obvious choices here:
+	 *
+	 * 1. Keep the task on the same CPU it last ran on:
+	 *    This is good because it doesn't migrate the task unbeknownst
+	 *    to the agent but on the flip side we pay the cost of an IPI
+	 *    if the waking CPU is different than task_cpu(p).
+	 *
+	 * 2. Migrate the task to the waking CPU:
+	 *    This is good because we don't need an IPI to do the wakeup
+	 *    but on the flip side this may end up being a pessimistic
+	 *    choice when the agent actually schedules the task.
+	 *
+	 *    For e.g. if the waking cpu is in a different NUMA domain
+	 *    than where the agent later schedules the task then we'll
+	 *    pay the cost of task_rq_lock() across sockets which is
+	 *    exactly what ttwu_queue_remote() aims to minimize.
+	 *
+	 * This can be configured using 'p->ghost.enclave->wake_on_waker_cpu'
+	 * and the default is to keep the task on the same CPU it last ran on.
+	 */
+	//if (READ_ONCE(p->ghost.enclave->wake_on_waker_cpu))
+	//	p->ghost.twi.wake_up_cpu = waker_cpu;
+	//else
+	msg->type = MSG_TASK_SELECT_RQ;
+	payload->pid = p->pid;
+	new_cpu = produce_for_task(p, msg);
+	//task_rq_unlock(rq, p, &rf);
+	p->ghost.twi.wake_up_cpu = new_cpu;
+
+	p->ghost.twi.waker_cpu = waker_cpu;
+	p->ghost.twi.last_ran_cpu = task_cpu(p);
+	if new_cpu != task_cpu(p) {
+	printk(KERN_INFO "selected cpu %d, from %d\n", new_cpu, task_cpu(p));
+	}
+
+	return p->ghost.twi.wake_up_cpu;
+}
+
+static int balance_ghost(struct rq *rq, struct task_struct *prev,
+			 struct rq_flags *rf)
+{
+
+	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct ghost_msg_payload_balance *payload = &msg->balance;
+
+	msg->type = MSG_BALANCE;
+	//payload->gtid = gtid(p);
+
+	produce_for_task(prev, msg);
+	//struct task_struct *agent = rq->ghost.agent;
+
+	//if (!agent || !agent->on_rq)
+		return 0;
+
+	/*
+	 * Try to commit a ready txn iff:
+	 * - there is no higher priority runnable task.
+	 * - there is no 'latched_task'
+	 */
+	//if (!rq->ghost.latched_task && !rq_adj_nr_running(rq) &&
+	//    ghost_txn_ready(cpu_of(rq))) {
+	//	rq_unpin_lock(rq, rf);
+	//	raw_spin_unlock(&rq->lock);
+
+	//	ghost_commit_pending_txn(COMMIT_AT_SCHEDULE);
+
+	//	raw_spin_lock(&rq->lock);
+	//	rq_repin_lock(rq, rf);
+	//}
+
+	//if (!rq->ghost.latched_task && rq->ghost.pnt_bpf_once) {
+	//	rq->ghost.pnt_bpf_once = false;
+	//	/* If there is a BPF program, this will unlock the RQ */
+	//	rq->ghost.in_pnt_bpf = true;
+	//	//ghost_bpf_pnt(agent->ghost.enclave, rq, rf);
+	//	rq->ghost.in_pnt_bpf = false;
+	//}
+
+	///*
+	// * We have something to run in 'latched_task' or a higher priority
+	// * sched_class became runnable while the rq->lock was dropped.
+	// */
+	//return rq->ghost.latched_task || rq_adj_nr_running(rq);
+}
+
+//static inline int produce_for_agent(struct rq *rq,
+//				    struct bpf_ghost_msg *msg)
+//{
+//	struct task_struct *agent = rq->ghost.agent;
+//
+//	agent_barrier_inc(rq);
+//	return __produce_for_task(agent->ghost.agent_type, msg, agent_barrier_get(agent));
+//}
 
 static inline int produce_for_agent_type(struct rq *rq,
 				    struct ghost_agent_type *agent_type,
@@ -4189,7 +4245,7 @@ static inline bool cpu_deliver_msg_tick(struct rq *rq, struct task_struct *p)
 	//	rcu_read_unlock();
 	//	return false;
 	//}
-	rcu_read_unlock();
+	//rcu_read_unlock();
 
 	msg->type = MSG_CPU_TICK;
 	payload->cpu = cpu_of(rq);
