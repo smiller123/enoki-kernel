@@ -712,7 +712,7 @@ static void psi_group_change(struct psi_group *group, int cpu,
 		if (!(m & (1 << t)))
 			continue;
 		if (groupc->tasks[t] == 0 && !psi_bug) {
-			printk_deferred(KERN_ERR "psi: task underflow! cpu=%d t=%d tasks=[%u %u %u %u] clear=%x set=%x\n",
+			printk(KERN_ERR "psi: task underflow! cpu=%d t=%d tasks=[%u %u %u %u] clear=%x set=%x\n",
 					cpu, t, groupc->tasks[0],
 					groupc->tasks[1], groupc->tasks[2],
 					groupc->tasks[3], clear, set);
@@ -805,6 +805,27 @@ void psi_task_change(struct task_struct *task, int clear, int set)
 
 	while ((group = iterate_groups(task, &iter)))
 		psi_group_change(group, cpu, clear, set, wake_clock);
+}
+
+void psi_print_stats(struct task_struct *prev, struct task_struct *next) {
+	struct psi_group *group = NULL;
+	int cpu = task_cpu(prev);
+	void *iter;
+	iter = NULL;
+	struct psi_group_cpu *groupc;
+	while ((group = iterate_groups(next, &iter))) {
+		if (per_cpu_ptr(group->pcpu, cpu)->tasks[NR_ONCPU]) {
+			break;
+		}
+
+	//	psi_group_change(group, cpu, 0, TSK_ONCPU, true);
+		groupc = per_cpu_ptr(group->pcpu, cpu);
+
+		printk(KERN_ERR "psi: print stats! cpu=%d tasks=[%u %u %u %u] clear=%x set=%x\n",
+				cpu, groupc->tasks[0],
+				groupc->tasks[1], groupc->tasks[2],
+				groupc->tasks[3]);
+	}
 }
 
 void psi_task_switch(struct task_struct *prev, struct task_struct *next,

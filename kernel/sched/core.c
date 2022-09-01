@@ -1653,6 +1653,20 @@ static inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 	p->sched_class->enqueue_task(rq, p, flags);
 }
 
+static inline void enqueue_task_fake(struct rq *rq, struct task_struct *p, int flags)
+{
+	//if (!(flags & ENQUEUE_NOCLOCK))
+	//	update_rq_clock(rq);
+
+	//if (!(flags & ENQUEUE_RESTORE)) {
+	//	sched_info_queued(rq, p);
+	//	psi_enqueue(p, flags & ENQUEUE_WAKEUP);
+	//}
+
+	//uclamp_rq_inc(rq, p);
+	//p->sched_class->enqueue_task(rq, p, flags);
+}
+
 static inline void dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 {
 	if (!(flags & DEQUEUE_NOCLOCK))
@@ -1673,6 +1687,14 @@ void activate_task(struct rq *rq, struct task_struct *p, int flags)
 	enqueue_task(rq, p, flags);
 
 	p->on_rq = TASK_ON_RQ_QUEUED;
+}
+
+void activate_task_fake(struct rq *rq, struct task_struct *p, int flags)
+{
+	//printk(KERN_INFO "activate task fake %d cpu %d\n", p->pid, cpu_of(rq));
+	enqueue_task_fake(rq, p, flags);
+
+	//p->on_rq = TASK_ON_RQ_QUEUED;
 }
 
 void deactivate_task(struct rq *rq, struct task_struct *p, int flags)
@@ -1943,7 +1965,7 @@ struct rq *move_queued_task_fake(struct rq *rq, struct rq_flags *rf,
 
 	rq = cpu_rq(new_cpu);
 
-	//rq_lock(rq, rf);
+	rq_lock(rq, rf);
 	BUG_ON(task_cpu(p) != new_cpu);
 	activate_task(rq, p, 0);
 	check_preempt_curr(rq, p, 0);
@@ -5312,8 +5334,13 @@ restart:
 
 	for_each_class(class) {
 		p = class->pick_next_task(rq);
-		if (p)
-			goto out_return;
+		if (p) {
+			//if (p->policy == SCHED_GHOST && cpu_of(rq) == 1) {
+			//	printk(KERN_INFO "not giving ghost task");
+			//} else {
+				goto out_return;
+			//}
+		}
 	}
 
 	/* The idle class should always have a runnable task: */
@@ -5463,6 +5490,7 @@ static void __sched notrace __schedule(bool preempt)
 	//ktime_get_real_ts64(&step1);
 
 	next = pick_next_task(rq, prev, &rf);
+	//if (next->policy != SCHED_GHOST || cpu_of(rq) != 1) {
 	clear_tsk_need_resched(prev);
 	clear_preempt_need_resched();
 	//struct timespec64 step2;
@@ -5494,16 +5522,18 @@ static void __sched notrace __schedule(bool preempt)
 		 * - switch_to() for arm64 (weakly-ordered, spin_unlock
 		 *   is a RELEASE barrier),
 		 */
-		++*switch_count;
+			++*switch_count;
 
-		migrate_disable_switch(rq, prev);
-		psi_sched_switch(prev, next, !task_on_rq_queued(prev));
+			migrate_disable_switch(rq, prev);
+			psi_sched_switch(prev, next, !task_on_rq_queued(prev));
 
-		trace_sched_switch(preempt, prev, next);
+			trace_sched_switch(preempt, prev, next);
 
 		/* Also unlocks the rq: */
 		//ktime_get_real_ts64(&step3);
-		rq = context_switch(rq, prev, next, &rf);
+		//if (next->policy != SCHED_GHOST || cpu_of(rq) != 1) {
+			rq = context_switch(rq, prev, next, &rf);
+		//}
 		//ktime_get_real_ts64(&step4);
 	} else {
 		if (do_report_timing > 0) {
@@ -5515,6 +5545,9 @@ static void __sched notrace __schedule(bool preempt)
 		__balance_callbacks(rq);
 		raw_spin_unlock_irq(&rq->lock);
 	}
+	//	} else {
+	//		printk(KERN_INFO "didn't context switch");
+	//	}
 	schedule_callback(rq);
 	//if (do_report_timing > 0) {
 //		ktime_get_real_ts64(&end);

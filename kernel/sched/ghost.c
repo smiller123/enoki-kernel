@@ -30,6 +30,7 @@
 
 #include "ghost.h"
 #include "sched.h"
+//#include "stats.h"
 
 
 static struct ghost_agent_type *ghost_agents;
@@ -189,7 +190,7 @@ int register_ghost_agent(const void *agent, int policy, const void* process_mess
 
 EXPORT_SYMBOL(register_ghost_agent);
 
-int unregister_ghost_agent(int policy)
+int unregister_ghost_agent(const void *agent)
 {
 	struct ghost_agent_type ** tmp;
 	printk(KERN_INFO "unregistering ghost agent");
@@ -198,7 +199,8 @@ int unregister_ghost_agent(int policy)
 	tmp = &ghost_agents;
 	printk(KERN_INFO "tmp %p %p", tmp, *tmp);
 	while (*tmp) {
-		if (policy == (*tmp)->policy) {
+		//if (policy == (*tmp)->policy) {
+		if (agent == (*tmp)->agent) {
 			printk(KERN_INFO "unregistering ghost agent %p", (*tmp)->agent);
 			*tmp = (*tmp)->next;
 			//agent->next = NULL;
@@ -408,12 +410,12 @@ static inline gtid_t gtid(struct task_struct *p)
 	return p->gtid;
 }
 
-static inline bool on_ghost_rq(struct rq *rq, struct task_struct *p)
-{
-	lockdep_assert_held(&rq->lock);
-	VM_BUG_ON(rq != task_rq(p));
-	return !list_empty(&p->ghost.run_list);
-}
+//static inline bool on_ghost_rq(struct rq *rq, struct task_struct *p)
+//{
+//	lockdep_assert_held(&rq->lock);
+//	VM_BUG_ON(rq != task_rq(p));
+//	return !list_empty(&p->ghost.run_list);
+//}
 
 bool is_agent(struct rq *rq, struct task_struct *p)
 {
@@ -750,7 +752,7 @@ static void dequeue_task_ghost(struct rq *rq, struct task_struct *p, int flags)
 	sub_nr_running(rq, 1);
 	//printk(KERN_INFO "dequeue_task_ghost %d, running %d\n", p->pid, rq->ghost.ghost_nr_running);
 
-	WARN_ON_ONCE(!on_ghost_rq(rq, p));
+	//WARN_ON_ONCE(!on_ghost_rq(rq, p));
 	list_del_init(&p->ghost.run_list);
 
 	/*
@@ -800,13 +802,13 @@ enqueue_task_ghost(struct rq *rq, struct task_struct *p, int flags)
 	rq->ghost.ghost_nr_running++;
 	//printk(KERN_INFO "enqueue_task_ghost %d, running %d\n", p->pid, rq->ghost.ghost_nr_running);
 
-	WARN_ON_ONCE(on_ghost_rq(rq, p));
-	list_add_tail(&p->ghost.run_list, &rq->ghost.tasks);
-	p->ghost.last_runnable_at = ktime_get();
+	//WARN_ON_ONCE(on_ghost_rq(rq, p));
+	//list_add_tail(&p->ghost.run_list, &rq->ghost.tasks);
+	//p->ghost.last_runnable_at = ktime_get();
 
-	if (flags & ENQUEUE_WAKEUP) {
-		WARN_ON_ONCE(is_agent(rq, p) && rq->ghost.blocked_in_run);
-	}
+	//if (flags & ENQUEUE_WAKEUP) {
+	//	WARN_ON_ONCE(is_agent(rq, p) && rq->ghost.blocked_in_run);
+	//}
 }
 
 static void set_next_task_ghost(struct rq *rq, struct task_struct *p,
@@ -987,14 +989,14 @@ static void set_txn_state(int *ptr, enum ghost_txn_state val)
 }
 
 static int validate_next_task(struct rq *rq, struct task_struct *next,
-			      uint32_t task_barrier, int *state)
+			      int *state)
 {
 	lockdep_assert_held(&rq->lock);
 
-	if (next->ghost.agent) {
-		set_txn_state(state, GHOST_TXN_INVALID_TARGET);
-		return -EINVAL;
-	}
+	//if (next->ghost.agent) {
+	//	set_txn_state(state, GHOST_TXN_INVALID_TARGET);
+	//	return -EINVAL;
+	//}
 
 	/*
 	 * Task departed, but the agent hasn't yet processed the
@@ -1021,10 +1023,10 @@ static int validate_next_task(struct rq *rq, struct task_struct *next,
 		return -ESTALE;
 	}
 
-	if (unlikely(task_barrier_get(next) != task_barrier)) {
-		set_txn_state(state, GHOST_TXN_TARGET_STALE);
-		return -ESTALE;
-	}
+	//if (unlikely(task_barrier_get(next) != task_barrier)) {
+	//	set_txn_state(state, GHOST_TXN_TARGET_STALE);
+	//	return -ESTALE;
+	//}
 
 	if (!task_on_rq_queued(next)) {
 		set_txn_state(state, GHOST_TXN_TARGET_NOT_RUNNABLE);
@@ -1098,7 +1100,7 @@ static inline void ghost_prepare_switch(struct rq *rq, struct task_struct *prev,
 	if (next) {
 		next->ghost.last_runnable_at = 0;
 
-		WARN_ON_ONCE(!on_ghost_rq(rq, next));
+		//WARN_ON_ONCE(!on_ghost_rq(rq, next));
 		if (likely(next != prev)) {
 			//struct ghost_status_word *sw;
 
@@ -1468,6 +1470,14 @@ done:
 	//	rq->ghost.blocked_in_run = false;
 	//	return pick_next_ghost_agent(rq);
 	//}
+	if (cpu_of(rq) == 1 && prev && next) {
+		if (next->policy == SCHED_GHOST) {
+		//	printk(KERN_INFO "got sched ghost\n");
+		}
+		//printk(KERN_INFO "returning pid %d\n", next->pid);
+		//psi_print_stats(prev, next);
+		//return NULL;
+	}
 
 	ghost_prepare_switch(rq, prev, next);
 	rq->ghost.must_resched = false;
@@ -1562,10 +1572,10 @@ static void set_cpus_allowed_ghost(struct task_struct *p,
 	 * without the rq->lock held, but message delivery requires rq->lock
 	 * held.
 	 */
-	if (!raw_spin_is_locked(&rq->lock)) {
-		__task_rq_lock(p, &rf);
-		locked = true;
-	}
+	//if (!raw_spin_is_locked(&rq->lock)) {
+	//	__task_rq_lock(p, &rf);
+	//	locked = true;
+	//}
 
 	/*
 	 * N.B. sched_setaffinity() can race with exit() such that the task
@@ -1679,7 +1689,7 @@ static struct rq *ghost_move_task(struct rq *rq, struct task_struct *next,
 		VM_BUG_ON(task_running(rq, next));
 		VM_BUG_ON(!task_on_rq_queued(next));
 		update_rq_clock(rq);
-		rq = move_queued_task(rq, rf, next, cpu);
+		rq = move_queued_task_fake(rq, rf, next, cpu);
 	//} else {
 		//invalidate_cached_tasks(rq, next);
 	}
@@ -2679,7 +2689,8 @@ static void ghost_uninhibit_task_msgs(struct task_struct *p)
 	if (WARN_ON_ONCE(!p->inhibit_task_msgs))
 		goto done;
 
-	rq = task_rq_lock(p, &rf);
+	//rq = task_rq_lock(p, &rf);
+	rq = task_rq(p);
 	if (p->state != TASK_DEAD) {
 		/*
 		 * 'inhibit_task_msgs' is used as a boolean but it actually
@@ -2735,7 +2746,7 @@ static void ghost_uninhibit_task_msgs(struct task_struct *p)
 		 * in all of these cases.
 		 */
 	}
-	task_rq_unlock(rq, p, &rf);
+	//task_rq_unlock(rq, p, &rf);
 
 done:
 	put_task_struct(p);
@@ -4133,9 +4144,9 @@ static int select_task_rq_ghost(struct task_struct *p, int cpu, int wake_flags)
 
 	p->ghost.twi.waker_cpu = waker_cpu;
 	p->ghost.twi.last_ran_cpu = task_cpu(p);
-	if new_cpu != task_cpu(p) {
-	printk(KERN_INFO "selected cpu %d, from %d\n", new_cpu, task_cpu(p));
-	}
+	//if new_cpu != task_cpu(p) {
+	//printk(KERN_INFO "selected cpu %d, from %d\n", new_cpu, task_cpu(p));
+	//}
 
 	return p->ghost.twi.wake_up_cpu;
 }
@@ -4148,9 +4159,12 @@ static int balance_ghost(struct rq *rq, struct task_struct *prev,
 	struct ghost_msg_payload_balance *payload = &msg->balance;
 
 	msg->type = MSG_BALANCE;
+	payload->cpu = cpu_of(rq);
 	//payload->gtid = gtid(p);
+	rq_unpin_lock(rq, rf);
 
 	produce_for_task(prev, msg);
+	rq_repin_lock(rq, rf);
 	//struct task_struct *agent = rq->ghost.agent;
 
 	//if (!agent || !agent->on_rq)
@@ -5328,11 +5342,11 @@ done:
 	return error;
 }
 
-static int __ghost_run_gtid_on(gtid_t gtid, u32 task_barrier, int run_flags,
-			       int cpu)
+static int __ghost_run_pid_on(uint64_t pid, int run_flags,
+			       int old_cpu, int cpu)
 {
 	struct rq_flags rf;
-	struct rq *rq;
+	struct rq *this_rq, *old_rq;
 	int err = 0;
 	struct task_struct *next;
 
@@ -5346,6 +5360,7 @@ static int __ghost_run_gtid_on(gtid_t gtid, u32 task_barrier, int run_flags,
 				    0;
 
 	WARN_ON_ONCE(preemptible());
+	//printk(KERN_INFO "rebalancing");
 
 	if (cpu < 0)
 		return -EINVAL;
@@ -5360,40 +5375,55 @@ static int __ghost_run_gtid_on(gtid_t gtid, u32 task_barrier, int run_flags,
 	//	return -EXDEV;
 	//}
 
+	this_rq = cpu_rq(cpu);
+	old_rq = cpu_rq(old_cpu);
 	rcu_read_lock();
-	next = find_task_by_gtid(gtid);
-	if (next == NULL || next->ghost.agent) {
+	next = find_task_by_pid_ns(pid, &init_pid_ns);
+	//next = find_task_by_gtid(gtid);
+	if (next == NULL) {
+		printk(KERN_INFO "next null, pid %d", pid);
 		rcu_read_unlock();
 		return -ENOENT;
 	}
-	rq = task_rq_lock(next, &rf);
+	double_lock_balance(this_rq, old_rq);
+	//rq = task_rq(next);
 	rcu_read_unlock();
 
-	err = validate_next_task(rq, next, task_barrier, /*state=*/ NULL);
+	err = validate_next_task(this_rq, next, /*state=*/ NULL);
 	if (err) {
-		task_rq_unlock(rq, next, &rf);
+		printk(KERN_INFO "bad validate task");
+		double_unlock_balance(this_rq, old_rq);
+		//task_rq_unlock(rq, next, &rf);
 		return err;
 	}
 
-	if (task_running(rq, next)) {
-		task_rq_unlock(rq, next, &rf);
+	if (task_running(old_rq, next)) {
+		printk(KERN_INFO "next running");
+		double_unlock_balance(this_rq, old_rq);
+		//task_rq_unlock(rq, next, &rf);
 		return -EBUSY;
 	}
 
-	rq = ghost_move_task(rq, next, cpu, &rf);
+	//printk(KERN_INFO "actually moving tasks");
+	deactivate_task(old_rq, next, 0);
+	set_task_cpu(next, cpu);
+	activate_task(this_rq, next, 0);
+	//rq = ghost_move_task(rq, next, cpu, &rf);
 
 	/*
 	 * Must not latch a task if there is no agent, otherwise PNT will never
 	 * see it.  (Latched tasks are cleared when the agent exits).
 	 */
-	if (unlikely(!rq->ghost.agent)) {
-		task_rq_unlock(rq, next, &rf);
-		return -EINVAL;
-	}
+	//if (unlikely(!rq->ghost.agent)) {
+	//	task_rq_unlock(rq, next, &rf);
+	//	return -EINVAL;
+	//}
 
 	if ((run_flags & DO_NOT_PREEMPT) &&
-	    (task_has_ghost_policy(rq->curr) || rq->ghost.latched_task)) {
-		task_rq_unlock(rq, next, &rf);
+	    (task_has_ghost_policy(this_rq->curr) || this_rq->ghost.latched_task)) {
+		printk(KERN_INFO "no preempt and policy");
+		double_unlock_balance(this_rq, old_rq);
+		//task_rq_unlock(rq, next, &rf);
 		return -ESTALE;
 	}
 
@@ -5407,13 +5437,15 @@ static int __ghost_run_gtid_on(gtid_t gtid, u32 task_barrier, int run_flags,
 	 * is running its own BPF program.  Either way, PNT will check for a
 	 * latched task or for a higher priority task when it relocks.
 	 */
-	if (!rq->ghost.in_pnt_bpf && !ghost_can_schedule(rq, gtid)) {
-		task_rq_unlock(rq, next, &rf);
-		return -ENOSPC;
-	}
+	//if (!rq->ghost.in_pnt_bpf && !ghost_can_schedule(rq, gtid)) {
+	//	task_rq_unlock(rq, next, &rf);
+	//	return -ENOSPC;
+	//}
 
-	ghost_set_pnt_state(rq, next, run_flags);
-	task_rq_unlock(rq, next, &rf);
+	//ghost_set_pnt_state(rq, next, run_flags);
+	//task_rq_unlock(rq, next, &rf);
+	double_unlock_balance(this_rq, old_rq);
+	resched_curr(this_rq);
 
 	return 0;
 }
@@ -5424,10 +5456,12 @@ static int __ghost_run_gtid_on(gtid_t gtid, u32 task_barrier, int run_flags,
  * Called from BPF helpers.  The programs that can call those helpers are
  * explicitly allowed in ghost_sched_func_proto.
  */
-int ghost_run_gtid_on(gtid_t gtid, u32 task_barrier, int run_flags, int cpu)
+//int ghost_run_gtid_on(gtid_t gtid, u32 task_barrier, int run_flags, int cpu)
+int ghost_run_pid_on(uint64_t pid, int run_flags, int old_cpu, int cpu)
 {
-	return __ghost_run_gtid_on(gtid, task_barrier, run_flags, cpu);
+	return __ghost_run_pid_on(pid, run_flags, old_cpu, cpu);
 }
+EXPORT_SYMBOL(ghost_run_pid_on);
 
 /*
  * Attempts to run gtid on cpu.  Returns 0 or -error.
@@ -5435,11 +5469,11 @@ int ghost_run_gtid_on(gtid_t gtid, u32 task_barrier, int run_flags, int cpu)
  * Like ghost_run_gtid_on, but checks that the calling CPU and the target cpu
  * are in the same enclave.
  */
-int ghost_run_gtid_on_check(gtid_t gtid, u32 task_barrier, int run_flags,
-			    int cpu)
-{
-	return __ghost_run_gtid_on(gtid, task_barrier, run_flags, cpu);
-}
+//int ghost_run_gtid_on_check(gtid_t gtid, u32 task_barrier, int run_flags,
+//			    int cpu)
+//{
+//	return __ghost_run_gtid_on(gtid, task_barrier, run_flags, cpu);
+//}
 
 //static inline bool _ghost_txn_ready(int cpu, int *commit_flags)
 //{

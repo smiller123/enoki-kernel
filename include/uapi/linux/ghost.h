@@ -377,6 +377,7 @@ struct ghost_msg_payload_migrate_task_rq {
 };
 
 struct ghost_msg_payload_balance {
+	int cpu;
 };
 
 struct bpf_ghost_msg {
