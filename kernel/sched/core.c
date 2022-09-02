@@ -5353,8 +5353,8 @@ out_return:
 	 * check_prev_preemption on!  This will break switchto, which checks
 	 * that field during context_switch()
 	 */
-	if (WARN_ON_ONCE(p == prev && rq->ghost.check_prev_preemption))
-		rq->ghost.check_prev_preemption = false;
+	//if (WARN_ON_ONCE(p == prev && rq->ghost.check_prev_preemption))
+	//	rq->ghost.check_prev_preemption = false;
 #endif
 
 	return p;

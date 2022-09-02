@@ -367,10 +367,13 @@ struct ghost_msg_payload_timer {
 
 struct ghost_msg_payload_pnt {
 	int cpu;
+	bool pick_task;
+	uint64_t ret_pid;
 };
 
 struct ghost_msg_payload_select_task_rq {
 	uint64_t pid;
+	int ret_cpu;
 };
 
 struct ghost_msg_payload_migrate_task_rq {
@@ -380,6 +383,8 @@ struct ghost_msg_payload_migrate_task_rq {
 
 struct ghost_msg_payload_balance {
 	int cpu;
+	bool do_move;
+	uint64_t move_pid;
 };
 
 struct ghost_msg_payload_rereg_prep {

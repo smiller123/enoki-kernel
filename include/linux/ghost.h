@@ -46,7 +46,7 @@ extern int reregister_ghost_agent(
 );
 extern int unregister_ghost_agent(const void*);
 
-extern int ghost_run_pid_on(uint64_t pid, int run_flags, int old_cpu, int cpu);
+extern int ghost_run_pid_on(uint64_t pid, int run_flags, int cpu);
 
 struct enclave_work {
 	struct list_head link;

@@ -4204,7 +4204,8 @@ static int select_task_rq_ghost(struct task_struct *p, int cpu, int wake_flags)
 	//else
 	msg->type = MSG_TASK_SELECT_RQ;
 	payload->pid = p->pid;
-	new_cpu = produce_for_task(p, msg);
+	produce_for_task(p, msg);
+	new_cpu = payload->ret_cpu;
 	//task_rq_unlock(rq, p, &rf);
 	p->ghost.twi.wake_up_cpu = new_cpu;
 
@@ -4223,6 +4224,7 @@ static int balance_ghost(struct rq *rq, struct task_struct *prev,
 
 	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
 	struct ghost_msg_payload_balance *payload = &msg->balance;
+	uint64_t move_pid;
 
 	msg->type = MSG_BALANCE;
 	payload->cpu = cpu_of(rq);
@@ -4230,6 +4232,10 @@ static int balance_ghost(struct rq *rq, struct task_struct *prev,
 	rq_unpin_lock(rq, rf);
 
 	produce_for_task(prev, msg);
+	if (payload->do_move) {
+		move_pid = payload->move_pid;
+		ghost_run_pid_on(move_pid, 0, cpu_of(rq));
+	}
 	rq_repin_lock(rq, rf);
 	//struct task_struct *agent = rq->ghost.agent;
 
@@ -4725,7 +4731,12 @@ static inline int cpu_deliver_msg_pnt(struct rq *rq,
 	msg->type = MSG_PNT;
 	payload->cpu = cpu_of(rq);
 
-	return produce_for_agent_type(rq, agent_type, msg);
+	produce_for_agent_type(rq, agent_type, msg);
+	if (payload->pick_task) {
+		return payload->ret_pid;
+	} else {
+		return -1;
+	}
 }
 
 static void release_from_ghost(struct rq *rq, struct task_struct *p)
@@ -5419,7 +5430,7 @@ done:
 }
 
 static int __ghost_run_pid_on(uint64_t pid, int run_flags,
-			       int old_cpu, int cpu)
+			       int cpu)
 {
 	struct rq_flags rf;
 	struct rq *this_rq, *old_rq;
@@ -5451,15 +5462,20 @@ static int __ghost_run_pid_on(uint64_t pid, int run_flags,
 	//	return -EXDEV;
 	//}
 
-	this_rq = cpu_rq(cpu);
-	old_rq = cpu_rq(old_cpu);
 	rcu_read_lock();
 	next = find_task_by_pid_ns(pid, &init_pid_ns);
+	this_rq = cpu_rq(cpu);
+	//old_rq = cpu_rq(old_cpu);
+	old_rq = task_rq(next);
 	//next = find_task_by_gtid(gtid);
 	if (next == NULL) {
 		printk(KERN_INFO "next null, pid %d", pid);
 		rcu_read_unlock();
 		return -ENOENT;
+	}
+	if (cpu_of(old_rq) == cpu) {
+		// Already running on the correct CPU
+		return 0;
 	}
 	double_lock_balance(this_rq, old_rq);
 	//rq = task_rq(next);
@@ -5533,9 +5549,9 @@ static int __ghost_run_pid_on(uint64_t pid, int run_flags,
  * explicitly allowed in ghost_sched_func_proto.
  */
 //int ghost_run_gtid_on(gtid_t gtid, u32 task_barrier, int run_flags, int cpu)
-int ghost_run_pid_on(uint64_t pid, int run_flags, int old_cpu, int cpu)
+int ghost_run_pid_on(uint64_t pid, int run_flags, int cpu)
 {
-	return __ghost_run_pid_on(pid, run_flags, old_cpu, cpu);
+	return __ghost_run_pid_on(pid, run_flags, cpu);
 }
 EXPORT_SYMBOL(ghost_run_pid_on);
 
