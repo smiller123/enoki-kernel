@@ -258,6 +258,8 @@ enum {
 	MSG_CPU_NOT_IDLE,	/* requested via run_flags: NEED_CPU_NOT_IDLE */
 	MSG_PNT,
 	MSG_BALANCE,
+	MSG_REREGISTER_PREPARE,
+	MSG_REREGISTER_INIT,
 };
 
 /* TODO: Move payload to header once all clients updated. */
@@ -380,6 +382,14 @@ struct ghost_msg_payload_balance {
 	int cpu;
 };
 
+struct ghost_msg_payload_rereg_prep {
+	void *data;
+};
+
+struct ghost_msg_payload_rereg_init {
+	void *data;
+};
+
 struct bpf_ghost_msg {
 	union {
 		struct ghost_msg_payload_task_dead	dead;
@@ -399,6 +409,8 @@ struct bpf_ghost_msg {
 		struct ghost_msg_payload_select_task_rq select;
 		struct ghost_msg_payload_migrate_task_rq migrate;
 		struct ghost_msg_payload_balance	balance;
+		struct ghost_msg_payload_rereg_prep	rereg_prep;
+		struct ghost_msg_payload_rereg_init	rereg_init;
 	};
 	uint16_t type;
 	uint32_t seqnum;

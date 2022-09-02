@@ -113,6 +113,9 @@ struct rq *move_queued_task_fake(struct rq *rq, struct rq_flags *rf,
 //				  struct task_struct *p);
 static int __sw_region_free(struct ghost_sw_region *region);
 static const struct file_operations queue_fops;
+static inline int produce_for_agent_type_no_lock(
+				    struct ghost_agent_type *agent_type,
+				    struct bpf_ghost_msg *msg);
 
 /* WARNING: This can be used only if we _already_ own a reference */
 //struct ghost_agent_type *get_ghost_agent(struct ghost_agent_type *agent)
@@ -169,6 +172,7 @@ int register_ghost_agent(const void *agent, int policy, const void* process_mess
 	agent_type->agent = agent;
 	agent_type->process_message = process_message;
 	agent_type->owner = (struct module *) 0;
+	rwlock_init(&agent_type->agent_lock);
 	agent_type->next = (struct ghost_agent_type *) 0;
 
 	//if (agent->parameters &&
@@ -187,7 +191,6 @@ int register_ghost_agent(const void *agent, int policy, const void* process_mess
 	printk(KERN_INFO "ghost agent name registered %d, ptr %p", policy, agent);
 	return res;
 }
-
 EXPORT_SYMBOL(register_ghost_agent);
 
 int unregister_ghost_agent(const void *agent)
@@ -216,8 +219,56 @@ int unregister_ghost_agent(const void *agent)
 
 	return -EINVAL;
 }
-
 EXPORT_SYMBOL(unregister_ghost_agent);
+
+int reregister_ghost_agent(const void *agent, int policy, const void* process_message) {
+	printk(KERN_INFO "starting reregister\n");
+	struct ghost_agent_type ** tmp;
+	write_lock(&ghost_agents_lock);
+	printk(KERN_INFO "locked reregister\n");
+	tmp = &ghost_agents;
+	printk(KERN_INFO "starting loop\n");
+	while (*tmp) {
+		printk(KERN_INFO "checking while\n");
+		if (policy == (*tmp)->policy) {
+			printk(KERN_INFO "found policy\n");
+			//struct bpf_ghost_msg *msg = kzalloc(sizeof(struct bpf_ghost_msg), GFP_KERNEL);
+			struct bpf_ghost_msg msg;
+			memset(&msg, 0, sizeof(msg));
+			printk(KERN_INFO "kzalloc\n");
+			struct ghost_msg_payload_rereg_prep *prep_payload = &msg.rereg_prep;
+			struct ghost_msg_payload_rereg_init *init_payload = &msg.rereg_init;
+			void *data;
+			write_lock(&(*tmp)->agent_lock);
+			printk(KERN_INFO "policy locked\n");
+
+			msg.type = MSG_REREGISTER_PREPARE;
+			//payload->cpu = cpu_of(rq);
+			produce_for_agent_type_no_lock(*tmp, &msg);
+			printk(KERN_INFO "sent prep message\n");
+			data = prep_payload->data;
+
+			(*tmp)->agent = agent;
+			(*tmp)->process_message = process_message;
+
+			memset(&msg, 0, sizeof(msg));
+			msg.type = MSG_REREGISTER_INIT;
+			init_payload->data = data;
+			produce_for_agent_type_no_lock(*tmp, &msg);
+			printk(KERN_INFO "sent init\n");
+
+			//agent->next = NULL;
+			write_unlock(&(*tmp)->agent_lock);
+			write_unlock(&ghost_agents_lock);
+			synchronize_rcu();
+			return 0;
+		}
+		tmp = &(*tmp)->next;
+	}
+	write_unlock(&ghost_agents_lock);
+	return -EINVAL;
+}
+EXPORT_SYMBOL(reregister_ghost_agent);
 
 /* True if X and Y have the same enclave, including having no enclave. */
 //static bool check_same_enclave(int cpu_x, int cpu_y)
@@ -3914,7 +3965,8 @@ ring_avail_slots(struct ghost_ring *r, uint32_t maxslots)
 //		    struct ghost_agent_type *agent_type)
 static int _produce(uint32_t barrier, int type,
 		    void *payload, int payload_size,
-		    struct ghost_agent_type *agent_type)
+		    struct ghost_agent_type *agent_type,
+		    bool lock)
 {
 	//struct ghost_ring *ring = q->ring;
 	uint32_t hidx, slots_needed, slots_skipped = 0;
@@ -3963,9 +4015,15 @@ static int _produce(uint32_t barrier, int type,
 	rcu_read_lock();
 	ret = 0;
 	if (agent_type && agent_type->process_message) {
+		if (lock) {
+			read_lock(&agent_type->agent_lock);
+		}
 		//printk(KERN_INFO "calling message send");
 		agent_type->process_message(agent_type->agent, type, msglen, barrier, payload, payload_size, &ret);
 		//printk(KERN_INFO "got ret %d\n", ret);
+		if (lock) {
+			read_unlock(&agent_type->agent_lock);
+		}
 	}
 	rcu_read_unlock();
 
@@ -3986,7 +4044,7 @@ static int _produce(uint32_t barrier, int type,
 
 static inline int __produce_for_task(struct ghost_agent_type *agent_type,
 				     struct bpf_ghost_msg *msg,
-				     uint32_t barrier)
+				     uint32_t barrier, bool lock)
 {
 	void *payload;
 	int payload_size;
@@ -4068,6 +4126,14 @@ static inline int __produce_for_task(struct ghost_agent_type *agent_type,
 		payload = &msg->balance;
 		payload_size = sizeof(msg->balance);
 		break;
+	case MSG_REREGISTER_PREPARE:
+		payload = &msg->rereg_prep;
+		payload_size = sizeof(msg->rereg_prep);
+		break;
+	case MSG_REREGISTER_INIT:
+		payload = &msg->rereg_init;
+		payload_size = sizeof(msg->rereg_init);
+		break;
 	default:
 		WARN(1, "unknown bpg_ghost_msg type %d!\n", msg->type);
 		return -EINVAL;
@@ -4078,14 +4144,14 @@ static inline int __produce_for_task(struct ghost_agent_type *agent_type,
 	//printk(KERN_INFO "calling _produce");
 	//return -1;
 	return _produce(barrier, msg->type,
-			payload, payload_size, agent_type);
+			payload, payload_size, agent_type, lock);
 }
 
 static inline int produce_for_task(struct task_struct *p,
 				   struct bpf_ghost_msg *msg)
 {
 	//printk(KERN_INFO "produce_for_task msg struct %p\n", p);
-	return __produce_for_task(p->ghost.agent_type, msg, task_barrier_get(p));
+	return __produce_for_task(p->ghost.agent_type, msg, task_barrier_get(p), true);
 }
 
 static void migrate_task_rq_ghost(struct task_struct *p, int new_cpu) {
@@ -4217,7 +4283,17 @@ static inline int produce_for_agent_type(struct rq *rq,
 	//struct task_struct *agent = rq->ghost.agent;
 
 	//agent_barrier_inc(rq);
-	return __produce_for_task(agent_type, msg, 0);
+	return __produce_for_task(agent_type, msg, 0, true);
+}
+
+static inline int produce_for_agent_type_no_lock(
+				    struct ghost_agent_type *agent_type,
+				    struct bpf_ghost_msg *msg)
+{
+	//struct task_struct *agent = rq->ghost.agent;
+
+	//agent_barrier_inc(rq);
+	return __produce_for_task(agent_type, msg, 0, false);
 }
 
 /*
