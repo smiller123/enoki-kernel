@@ -88,7 +88,19 @@ struct gf_dirent {
 //{
 //	return of->kn->priv;
 //}
-//
+
+static int of_to_policy(struct kernfs_open_file *of)
+{
+	return (int) of->kn->priv;
+}
+
+static int seq_to_policy(struct seq_file *sf)
+{
+	struct kernfs_open_file *of = sf->private;
+
+	return of_to_policy(of);
+}
+
 //static struct ghost_enclave *seq_to_e(struct seq_file *sf)
 //{
 //	struct kernfs_open_file *of = sf->private;
@@ -97,21 +109,21 @@ struct gf_dirent {
 //}
 
 /* For enclave files whose priv directly points to a ghost enclave. */
-//static int gf_e_open(struct kernfs_open_file *of)
-//{
+static int gf_ctl_open(struct kernfs_open_file *of)
+{
 //	struct ghost_enclave *e = of_to_e(of);
-//
+
 //	kref_get(&e->kref);
-//	return 0;
-//}
-//
-///* For enclave files whose priv directly points to a ghost enclave. */
-//static void gf_e_release(struct kernfs_open_file *of)
-//{
+	return 0;
+}
+
+/* For enclave files whose priv directly points to a ghost enclave. */
+static void gf_ctl_release(struct kernfs_open_file *of)
+{
 //	struct ghost_enclave *e = of_to_e(of);
-//
-//	//kref_put(&e->kref, enclave_release);
-//}
+
+	//kref_put(&e->kref, enclave_release);
+}
 
 /*
  * There can be at most one writable open, and there can be any number of
@@ -333,13 +345,13 @@ struct gf_dirent {
 //	.write			= gf_cpumask_write,
 //};
 //
-//static int gf_ctl_show(struct seq_file *sf, void *v)
-//{
-//	struct ghost_enclave *e = seq_to_e(sf);
-//
-//	seq_printf(sf, "%lu", e->id);
-//	return 0;
-//}
+static int gf_ctl_show(struct seq_file *sf, void *v)
+{
+	int policy = seq_to_policy(sf);
+
+	seq_printf(sf, "%lu", policy);
+	return 0;
+}
 
 /* Called from the scheduler when it destroys the enclave. */
 //void ghostfs_remove_enclave(struct ghost_enclave *e)
@@ -465,7 +477,7 @@ static ssize_t gf_ctl_write(struct kernfs_open_file *of, char *buf,
 	 * Otherwise they'll fail.
 	 */
 
-	strip_slash_n(buf, len);
+	//strip_slash_n(buf, len);
 
 	//if (!strcmp(buf, "destroy")) {
 	//	destroy_enclave(of);
@@ -481,10 +493,12 @@ static ssize_t gf_ctl_write(struct kernfs_open_file *of, char *buf,
 	return len;
 }
 
-//static long gf_ctl_ioctl(struct kernfs_open_file *of, unsigned int cmd,
-//			 unsigned long arg)
-//{
+static long gf_ctl_ioctl(struct kernfs_open_file *of, unsigned int cmd,
+			 unsigned long arg)
+{
 //	struct ghost_enclave *e = of_to_e(of);
+	int policy = of_to_policy(of);
+	printk(KERN_INFO "got into ioctl cmd %d", cmd);
 //
 //	if (!(of->file->f_mode & FMODE_WRITE))
 //		return -EACCES;
@@ -498,10 +512,20 @@ static ssize_t gf_ctl_write(struct kernfs_open_file *of, char *buf,
 //	case GHOST_IOC_SW_FREE:
 //		return 0;
 //		//return ghost_sw_free(e, (void __user *)arg);
-//	case GHOST_IOC_CREATE_QUEUE:
-//		//return 0;
-//		return ghost_create_queue(e,
-//				(struct ghost_ioc_create_queue __user *)arg);
+	if (cmd == GHOST_IOC_CREATE_QUEUE) {
+		//return 0;
+		return bento_create_queue(policy,
+				(struct bento_ioc_create_queue __user *)arg);
+		//return ghost_create_queue(e,
+		//		(struct ghost_ioc_create_queue __user *)arg);
+	}
+	if (cmd == GHOST_IOC_ENTER_QUEUE) {
+		//return 0;
+		return bento_enter_queue(policy,
+				(struct bento_ioc_enter_queue __user *)arg);
+		//return ghost_create_queue(e,
+		//		(struct ghost_ioc_create_queue __user *)arg);
+	}
 //	case GHOST_IOC_ASSOC_QUEUE:
 //		return ghost_associate_queue(
 //				(struct ghost_ioc_assoc_queue __user *)arg);
@@ -526,7 +550,8 @@ static ssize_t gf_ctl_write(struct kernfs_open_file *of, char *buf,
 //				(struct ghost_ioc_timerfd_settime __user *)arg);
 //	}
 //	return -ENOIOCTLCMD;
-//}
+	return 0;
+}
 
 //static struct kernfs_ops gf_ops_e_ctl = {
 //	.open			= gf_e_open,
@@ -735,6 +760,22 @@ static ssize_t gf_ctl_write(struct kernfs_open_file *of, char *buf,
 //	.seq_show		= gf_status_show,
 //};
 
+static struct kernfs_ops gf_ops_sched_ctl = {
+	.open			= gf_ctl_open,
+	.release		= gf_ctl_release,
+	.seq_show		= gf_ctl_show,
+	.write			= gf_ctl_write,
+	.ioctl			= gf_ctl_ioctl,
+};
+
+static struct gf_dirent sched_dirtab[] = {
+	{
+		.name		= "ctl",
+		.mode		= 0664,
+		.ops		= &gf_ops_sched_ctl,
+	}
+};
+
 //static struct gf_dirent enclave_dirtab[] = {
 //	{
 //		.name		= "sw_regions",
@@ -795,25 +836,72 @@ static ssize_t gf_ctl_write(struct kernfs_open_file *of, char *buf,
 //};
 
 /* Caller is responsible for cleanup.  Removing the parent will suffice. */
-//static int gf_add_files(struct kernfs_node *parent, struct gf_dirent *dirtab,
-//			struct ghost_enclave *priv)
-//{
-//	struct gf_dirent *gft;
-//	struct kernfs_node *kn;
-//
-//	for (gft = dirtab; gft->name; gft++) {
-//		if (gft->is_dir) {
-//			kn = kernfs_create_dir(parent, gft->name, gft->mode,
-//					       NULL);
-//		} else {
-//			kn = kernfs_create_file(parent, gft->name, gft->mode,
-//						gft->size, gft->ops, priv);
-//		}
-//		if (IS_ERR(kn))
-//			return PTR_ERR(kn);
-//	}
-//	return 0;
-//}
+static int gf_add_files(struct kernfs_node *parent, struct gf_dirent *dirtab,
+			void *priv)
+{
+	struct gf_dirent *gft;
+	struct kernfs_node *kn;
+
+	for (gft = dirtab; gft->name; gft++) {
+		if (gft->is_dir) {
+			kn = kernfs_create_dir(parent, gft->name, gft->mode,
+					       NULL);
+		} else {
+			kn = kernfs_create_file(parent, gft->name, gft->mode,
+						gft->size, gft->ops, priv);
+		}
+		if (IS_ERR(kn))
+			return PTR_ERR(kn);
+	}
+	return 0;
+}
+
+int setup_sched_ioctl(int policy)
+{
+	struct kernfs_node *dir;
+	char name[31];
+	int ret;
+
+	/*
+	 * ghost_create_enclave() is mostly just "alloc and initialize".
+	 * Anything done by it gets undone in enclave_release, and it is not
+	 * discoverable, usable, or otherwise hooked into the kernel until
+	 * kernfs_active().
+	 */
+	//e = ghost_create_enclave();
+	//if (!e)
+	//	return -ENOMEM;
+	//e->id = id;
+	if (snprintf(name, sizeof(name), "enclave_%d", policy) >= sizeof(name)) {
+		ret = -ENOSPC;
+		goto out_e;
+	}
+
+	dir = kernfs_create_dir(ghost_kfs_root->kn, name, 0555, NULL);
+	if (IS_ERR(dir)) {
+		ret = PTR_ERR(dir);
+		goto out_e;
+	}
+
+	ret = gf_add_files(dir, sched_dirtab, (void *)policy);
+	if (ret)
+		goto out_dir;
+
+	/*
+	 * Once the enclave has been activated, it is available to userspace and
+	 * can be used for scheduling.  After that, we must destroy it by
+	 * calling ghost_destroy_enclave(), not by releasing the reference.
+	 */
+	kernfs_activate(dir);	/* recursive */
+
+	return 0;
+
+out_dir:
+	kernfs_remove(dir);	/* recursive */
+out_e:
+	//kref_put(&e->kref, enclave_release);
+	return ret;
+}
 
 //static int make_enclave(struct kernfs_node *parent, unsigned long id)
 //{
@@ -864,53 +952,53 @@ static ssize_t gf_ctl_write(struct kernfs_open_file *of, char *buf,
 //	return ret;
 //}
 //
-static ssize_t gf_top_ctl_write(struct kernfs_open_file *of, char *buf,
-				size_t len, loff_t off)
-{
-	struct kernfs_node *ctl = of->kn;
-	struct kernfs_node *top_dir = ctl->parent;
-	unsigned long x;
-	int ret;
+//static ssize_t gf_top_ctl_write(struct kernfs_open_file *of, char *buf,
+//				size_t len, loff_t off)
+//{
+//	struct kernfs_node *ctl = of->kn;
+//	struct kernfs_node *top_dir = ctl->parent;
+//	unsigned long x;
+//	int ret;
+//
+//	strip_slash_n(buf, len);
+//
+//	/* This will ignore any extra digits or characters beyond the %u. */
+//	ret = sscanf(buf, "create %lu", &x);
+//	//if (ret == 1) {
+//	//	//ret = make_enclave(top_dir, x);
+//	//	return ret ? ret : len;
+//	//}
+//
+//	return -EINVAL;
+//}
 
-	strip_slash_n(buf, len);
+//static struct kernfs_ops gf_ops_top_ctl = {
+//	.write			= gf_top_ctl_write,
+//};
 
-	/* This will ignore any extra digits or characters beyond the %u. */
-	ret = sscanf(buf, "create %lu", &x);
-	//if (ret == 1) {
-	//	//ret = make_enclave(top_dir, x);
-	//	return ret ? ret : len;
-	//}
-
-	return -EINVAL;
-}
-
-static struct kernfs_ops gf_ops_top_ctl = {
-	.write			= gf_top_ctl_write,
-};
-
-static int gf_top_version_show(struct seq_file *sf, void *v)
-{
-	seq_printf(sf, "%u", GHOST_VERSION);
-	return 0;
-}
-
-static struct kernfs_ops gf_ops_top_version = {
-	.seq_show		= gf_top_version_show,
-};
-
-static struct gf_dirent top_dirtab[] = {
-	{
-		.name		= "ctl",
-		.mode		= 0660,
-		.ops		= &gf_ops_top_ctl,
-	},
-	{
-		.name		= "version",
-		.mode		= 0444,
-		.ops		= &gf_ops_top_version,
-	},
-	{0}
-};
+//static int gf_top_version_show(struct seq_file *sf, void *v)
+//{
+//	seq_printf(sf, "%u", GHOST_VERSION);
+//	return 0;
+//}
+//
+//static struct kernfs_ops gf_ops_top_version = {
+//	.seq_show		= gf_top_version_show,
+//};
+//
+//static struct gf_dirent top_dirtab[] = {
+//	{
+//		.name		= "ctl",
+//		.mode		= 0660,
+//		.ops		= &gf_ops_top_ctl,
+//	},
+//	{
+//		.name		= "version",
+//		.mode		= 0444,
+//		.ops		= &gf_ops_top_version,
+//	},
+//	{0}
+//};
 
 /*
  * Most gf_dirent file sizes are not known at compile time.  Most don't matter
@@ -929,8 +1017,9 @@ static void runtime_adjust_dirtabs(void)
 
 static int __init ghost_setup_root(void)
 {
-	int ret;
+	int ret = 0;
 	struct kernfs_root *fs_root;
+	//printk(KERN_INFO "calling ghost_setup_root???");
 
 	fs_root = kernfs_create_root(NULL, KERNFS_ROOT_CREATE_DEACTIVATED |
 				     KERNFS_ROOT_EXTRA_OPEN_PERM_CHECK, NULL);
@@ -945,7 +1034,7 @@ static int __init ghost_setup_root(void)
 
 	ghost_kfs_root = fs_root;
 
-	//runtime_adjust_dirtabs();
+	runtime_adjust_dirtabs();
 
 	kernfs_activate(ghost_kfs_root->kn);
 

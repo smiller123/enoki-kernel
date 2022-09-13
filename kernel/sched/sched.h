@@ -246,6 +246,10 @@ extern int ghost_cpu_data_mmap(struct file *file, struct vm_area_struct *vma,
 //			 struct ghost_sw_info __user *uinfo);
 //extern int ghost_create_queue(struct ghost_enclave *e,
 //			      struct ghost_ioc_create_queue __user *arg);
+extern int bento_create_queue(int policy,
+			      struct bento_ioc_create_queue __user *arg);
+extern int bento_enter_queue(int policy,
+			      struct bento_ioc_enter_queue __user *arg);
 //extern int ghost_associate_queue(struct ghost_ioc_assoc_queue __user *arg);
 extern int ghost_set_default_queue(
 			struct ghost_ioc_set_default_queue __user *arg);
@@ -282,6 +286,8 @@ extern void ghost_agent_schedule(void);
 //extern int ghost_run_gtid_on_check(s64 gtid, u32 task_barrier, int run_flags,
 //				   int cpu);
 extern void ghost_cpu_idle(void);
+
+extern int setup_sched_ioctl(int policy);
 
 struct rq_flags;
 #ifdef CONFIG_BPF

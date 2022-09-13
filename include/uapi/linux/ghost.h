@@ -99,11 +99,31 @@ struct ghost_ioc_sw_get_info {
 	struct ghost_sw_info response;
 };
 
-struct ghost_ioc_create_queue {
-	int elems;
-	int node;
-	int flags;
+//struct ghost_ioc_create_queue {
+//	int elems;
+//	int node;
+//	int flags;
+//	ulong mapsize;
+//};
+
+//struct bento_ring_offsets {
+//	uint32_t head;
+//	uint32_t tail;
+//	uint32_t ring_mask;
+//	uint32_t flags;
+//	uint32_t dropped;
+//	uint32_t array;
+//};
+
+struct bento_ioc_create_queue {
+	uint32_t elems;
+	uint32_t flags;
 	ulong mapsize;
+//	struct bento_ring_offsets offsets;
+};
+
+struct bento_ioc_enter_queue {
+	uint32_t entries;
 };
 
 struct ghost_ioc_assoc_queue {
@@ -156,7 +176,7 @@ struct ghost_ioc_timerfd_settime {
 #define GHOST_IOC_NULL			_IO('g', 0)
 #define GHOST_IOC_SW_GET_INFO		_IOWR('g', 1, struct ghost_ioc_sw_get_info)
 #define GHOST_IOC_SW_FREE		_IOW('g', 2, struct ghost_sw_info)
-#define GHOST_IOC_CREATE_QUEUE		_IOWR('g', 3, struct ghost_ioc_create_queue)
+#define GHOST_IOC_CREATE_QUEUE		_IOWR('g', 3, struct bento_ioc_create_queue)
 #define GHOST_IOC_ASSOC_QUEUE		_IOWR('g', 4, struct ghost_ioc_assoc_queue)
 #define GHOST_IOC_SET_DEFAULT_QUEUE	_IOW('g', 5, struct ghost_ioc_set_default_queue)
 #define GHOST_IOC_CONFIG_QUEUE_WAKEUP	_IOW('g', 6, struct ghost_ioc_config_queue_wakeup)
@@ -164,6 +184,7 @@ struct ghost_ioc_timerfd_settime {
 #define GHOST_IOC_COMMIT_TXN		_IOW('g', 8, struct ghost_ioc_commit_txn)
 #define GHOST_IOC_SYNC_GROUP_TXN	_IOW('g', 9, struct ghost_ioc_commit_txn)
 #define GHOST_IOC_TIMERFD_SETTIME	_IOWR('g', 10, struct ghost_ioc_timerfd_settime)
+#define GHOST_IOC_ENTER_QUEUE		_IOWR('g', 11, struct bento_ioc_enter_queue)
 
 /*
  * Status word region APIs.
@@ -210,10 +231,14 @@ struct ghost_sw_region_header {
  * Queue APIs.
  */
 struct ghost_queue_header {
-	uint32_t version;	/* ABI version */
-	uint32_t start;		/* offset from the header to start of ring */
+//	uint32_t version;	/* ABI version */
+//	uint32_t start;		/* offset from the header to start of ring */
+	uint32_t offset;
 	uint32_t nelems;	/* power-of-2 size of ghost_ring.msgs[] */
-} __ghost_cacheline_aligned;
+	uint32_t head;
+	uint32_t tail;
+};
+//} __ghost_cacheline_aligned;
 #define GHOST_QUEUE_VERSION	0
 
 struct ghost_msg {
@@ -260,6 +285,10 @@ enum {
 	MSG_BALANCE,
 	MSG_REREGISTER_PREPARE,
 	MSG_REREGISTER_INIT,
+	MSG_MSG_SIZE,
+	MSG_CREATE_QUEUE,
+	MSG_ENTER_QUEUE,
+	MSG_UNREGISTER_QUEUE,
 };
 
 /* TODO: Move payload to header once all clients updated. */
@@ -395,6 +424,22 @@ struct ghost_msg_payload_rereg_init {
 	void *data;
 };
 
+struct ghost_msg_payload_msg_size {
+	uint32_t msg_size;
+};
+
+struct ghost_msg_payload_create_queue {
+	void *q;
+};
+
+struct ghost_msg_payload_enter_queue {
+	uint32_t entries;
+};
+
+struct ghost_msg_payload_unreg_queue {
+	uint32_t entries;
+};
+
 struct bpf_ghost_msg {
 	union {
 		struct ghost_msg_payload_task_dead	dead;
@@ -416,6 +461,10 @@ struct bpf_ghost_msg {
 		struct ghost_msg_payload_balance	balance;
 		struct ghost_msg_payload_rereg_prep	rereg_prep;
 		struct ghost_msg_payload_rereg_init	rereg_init;
+		struct ghost_msg_payload_msg_size	msg_size;
+		struct ghost_msg_payload_create_queue	create_queue;
+		struct ghost_msg_payload_enter_queue	enter_queue;
+		struct ghost_msg_payload_unreg_queue	unreg_queue;
 	};
 	uint16_t type;
 	uint32_t seqnum;
@@ -436,10 +485,15 @@ struct ghost_ring {
 	 * kernel increments 'overflow' any time there aren't enough
 	 * free slots to produce a message.
 	 */
-	_ghost_ring_index_t head;
-	_ghost_ring_index_t tail;
-	_ghost_ring_index_t overflow;
-	struct ghost_msg msgs[0];  /* array of size 'header->nelems' */
+	//_ghost_ring_index_t head;
+	//_ghost_ring_index_t tail;
+	//_ghost_ring_index_t overflow;
+	//struct ghost_msg msgs[0];  /* array of size 'header->nelems' */
+	void *msgs;
+	uint32_t nelems;
+	uint32_t head;
+	uint32_t tail;
+
 };
 
 #define GHOST_MAX_QUEUE_ELEMS	65536	/* arbitrary */

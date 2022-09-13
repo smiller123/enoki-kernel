@@ -26,6 +26,7 @@
 
 struct ghost_agent_type {
 	int policy;
+	uint32_t msg_size;
 	const void *agent;
 	void (*process_message) (const void* agent, int type, int msglen, uint32_t barrier,
 			void *payload, int payload_size, int *retval);
@@ -117,16 +118,23 @@ struct ghost_queue {
 	 *
 	 *  See go/ghost-queue-change for more details.
 	 */
-	spinlock_t lock;
+	//spinlock_t lock;
 	struct kref kref;
+	int policy;
 
-	struct ghost_enclave *enclave;
+	//struct ghost_enclave *enclave;
 
 	/* 'ring' and 'nelems' are read-only after initialization */
-	struct ghost_ring *ring;
+//	struct ghost_ring *ring;
+//	void *ring;
 	uint32_t nelems;	/* power-of-2 size of ghost_ring.msgs[] */
+//	uint32_t readptr;
+//	uint32_t writeptr;
+	uint32_t mask;
+	uint32_t msg_size;
 
-	void *addr;		/*
+	void *addr;		
+	/*
 				 * address of vmalloc'ed region; this is
 				 * deliberately a 'void *' instead of
 				 * 'ghost_queue_header *' so we don't
@@ -135,12 +143,10 @@ struct ghost_queue {
 
 	ulong mapsize;		/* size of the vmalloc'ed region */
 
-	struct queue_notifier *notifier;  /* rcu-protected agent wakeup info */
+	//struct queue_notifier *notifier;  /* rcu-protected agent wakeup info */
 
 	struct rcu_head rcu;		/* deferred free glue */
 	struct work_struct free_work;
-	void (*process_message) (int type, int msglen, uint32_t barrier,
-			void *payload, int payload_size);
 };
 
 struct ghost_queue *fd_to_queue(struct fd f);
