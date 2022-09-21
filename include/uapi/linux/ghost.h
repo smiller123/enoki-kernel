@@ -185,6 +185,7 @@ struct ghost_ioc_timerfd_settime {
 #define GHOST_IOC_SYNC_GROUP_TXN	_IOW('g', 9, struct ghost_ioc_commit_txn)
 #define GHOST_IOC_TIMERFD_SETTIME	_IOWR('g', 10, struct ghost_ioc_timerfd_settime)
 #define GHOST_IOC_ENTER_QUEUE		_IOWR('g', 11, struct bento_ioc_enter_queue)
+#define GHOST_IOC_CREATE_RECORD		_IOWR('g', 12, struct bento_ioc_create_queue)
 
 /*
  * Status word region APIs.
@@ -289,6 +290,7 @@ enum {
 	MSG_CREATE_QUEUE,
 	MSG_ENTER_QUEUE,
 	MSG_UNREGISTER_QUEUE,
+	MSG_CLEANUP,
 };
 
 /* TODO: Move payload to header once all clients updated. */
@@ -440,6 +442,10 @@ struct ghost_msg_payload_unreg_queue {
 	uint32_t entries;
 };
 
+struct ghost_msg_payload_cleanup {
+	struct file *record_file;
+};
+
 struct bpf_ghost_msg {
 	union {
 		struct ghost_msg_payload_task_dead	dead;
@@ -465,6 +471,7 @@ struct bpf_ghost_msg {
 		struct ghost_msg_payload_create_queue	create_queue;
 		struct ghost_msg_payload_enter_queue	enter_queue;
 		struct ghost_msg_payload_unreg_queue	unreg_queue;
+		struct ghost_msg_payload_cleanup	cleanup;
 	};
 	uint16_t type;
 	uint32_t seqnum;

@@ -526,6 +526,13 @@ static long gf_ctl_ioctl(struct kernfs_open_file *of, unsigned int cmd,
 		//return ghost_create_queue(e,
 		//		(struct ghost_ioc_create_queue __user *)arg);
 	}
+	if (cmd == GHOST_IOC_CREATE_RECORD) {
+		//return 0;
+		return bento_create_record(policy,
+				(struct bento_ioc_create_queue __user *)arg);
+		//return ghost_create_queue(e,
+		//		(struct ghost_ioc_create_queue __user *)arg);
+	}
 //	case GHOST_IOC_ASSOC_QUEUE:
 //		return ghost_associate_queue(
 //				(struct ghost_ioc_assoc_queue __user *)arg);

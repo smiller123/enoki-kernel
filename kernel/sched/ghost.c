@@ -120,6 +120,73 @@ static inline int produce_for_agent_type(
 				    struct ghost_agent_type *agent_type,
 				    struct bpf_ghost_msg *msg);
 
+
+#define WRITEK_PENDING_WAKEUP	0x01
+#define WRITEK_PENDING_OUTPUT	0x02
+
+static DEFINE_PER_CPU(int, writek_pending);
+
+static void wake_up_writek_work_func(struct irq_work *irq_work)
+{
+	struct ghost_agent_type **p;
+	int pending = __this_cpu_xchg(writek_pending, 0);
+	printk(KERN_INFO "got into interrupt func");
+	// Can't accept arguments, so loop through all schedulers and print
+	// whatever needs to be printed
+		//if ((*p)->policy == policy)
+		//	break;
+	
+
+	//if (pending & WRITEK_PENDING_OUTPUT) {
+		/* If trylock fails, someone else is doing the printing */
+		//if (console_trylock())
+		//	console_unlock();
+	//}
+
+	//if (pending & WRITEK_PENDING_WAKEUP)
+	//	wake_up_interruptible(&log_wait);
+}
+
+static DEFINE_PER_CPU(struct irq_work, wake_up_writek_work) =
+	IRQ_WORK_INIT_LAZY(wake_up_writek_work_func);
+
+//void wake_up_writek(void)
+//{
+//	if (!writek_percpu_data_ready())
+//		return;
+//
+//	preempt_disable();
+//	if (waitqueue_active(&log_wait)) {
+//		this_cpu_or(writek_pending, WRITEK_PENDING_WAKEUP);
+//		irq_work_queue(this_cpu_ptr(&wake_up_writek_work));
+//	}
+//	preempt_enable();
+//}
+
+void defer_file_output(void)
+{
+	//if (!writek_percpu_data_ready())
+	//	return;
+
+	preempt_disable();
+	__this_cpu_or(writek_pending, WRITEK_PENDING_OUTPUT);
+	irq_work_queue(this_cpu_ptr(&wake_up_writek_work));
+	preempt_enable();
+}
+
+//int writek_deferred(const char *fmt, va_list args)
+int writek_deferred(void)
+{
+	int r;
+
+	// TODO: make our copy of vprintk emit that saves the expected info
+	//r = vprintk_emit(0, LOGLEVEL_SCHED, NULL, fmt, args);
+	defer_file_output();
+
+	return r;
+}
+
+
 /* WARNING: This can be used only if we _already_ own a reference */
 //struct ghost_agent_type *get_ghost_agent(struct ghost_agent_type *agent)
 //{
@@ -164,7 +231,8 @@ static struct ghost_agent_type **find_ghost_agent_fake(int policy)
 	return p;
 }
 
-int register_ghost_agent(const void *agent, int policy, const void* process_message)
+int register_ghost_agent(const void *agent,
+		int policy, const void* process_message)
 {
 	int res = 0;
 	struct ghost_agent_type ** p;
@@ -274,6 +342,43 @@ int reregister_ghost_agent(const void *agent, int policy, const void* process_me
 	return -EINVAL;
 }
 EXPORT_SYMBOL(reregister_ghost_agent);
+
+int file_write_deferred(int policy, char *buf)
+{
+	//va_list args;
+	struct ghost_agent_type ** p;
+	p = find_ghost_agent(policy);
+	//for (p = &ghost_agents; *p; p = &(*p)->next) {
+	if ((*p)->record_queue) {
+		// should probably lock on this queue
+		//char *buf = "hello\n";
+		char *start = (char *)(*p)->record_queue->addr;
+		struct ghost_queue_header *header = (struct ghost_queue_header *)start;
+		uint32_t index = header->head & (header->nelems - 1);
+		start += header->offset;
+		// start points to an array of length 256 size str
+		char *item = start + (index * 256);
+		strscpy(item, buf, strlen(buf));
+		header->head += 1;
+	}
+		//if ((*p)->record_file) {
+			//char *buf = "";
+			//printk(KERN_INFO "writing to file %p\n", (*p)->record_file);
+			//char *buf = "hi\n";
+			//kernel_write((*p)->record_file, buf, 3, 0);
+		//}
+	//}
+	//int r;
+
+	//va_start(args, fmt);
+	//r = writek_deferred(fmt, args);
+	//r = writek_deferred();
+	//va_end(args);
+	return 0;
+
+	//return r;
+}
+EXPORT_SYMBOL(file_write_deferred);
 
 /* True if X and Y have the same enclave, including having no enclave. */
 //static bool check_same_enclave(int cpu_x, int cpu_y)
@@ -1908,6 +2013,17 @@ static void __queue_free_work(struct work_struct *work)
 	kfree(q);
 }
 
+static void __record_free_work(struct work_struct *work)
+{
+	struct ghost_queue *q = container_of(work, struct ghost_queue,
+					     free_work);
+	struct ghost_agent_type **agent_ptr = find_ghost_agent(q->policy);
+	struct ghost_agent_type *agent;
+	agent->record_queue = NULL;
+	vfree(q->addr);
+	kfree(q);
+}
+
 void _queue_free_rcu_callback(struct rcu_head *rhp)
 {
 	struct ghost_queue *q = container_of(rhp, struct ghost_queue, rcu);
@@ -3484,6 +3600,147 @@ err_vmalloc:
 	return error;
 }
 
+int bento_create_record(int policy,
+		       struct bento_ioc_create_queue __user *arg)
+{
+	ulong size;
+	int error = 0, fd, elems, node, flags;
+	struct ghost_queue *q;
+	struct ghost_queue_header *h;
+	struct bento_ioc_create_queue create_queue;
+	struct ghost_agent_type *agent;
+	// TODO: figure out the correct message size
+	uint32_t msg_size = 256;
+
+	const int valid_flags = 0;	/* no flags for now */
+	struct ghost_agent_type **agent_ptr = find_ghost_agent(policy);
+	printk(KERN_INFO "create_queue 1");
+	if (!(*agent_ptr)) {
+		return -EBADF;
+	}
+	printk(KERN_INFO "create_queue 2");
+	agent = *agent_ptr;
+
+	if (copy_from_user(&create_queue, arg,
+			   sizeof(struct bento_ioc_create_queue)))
+		return -EFAULT;
+
+	printk(KERN_INFO "create_queue 3");
+	elems = create_queue.elems;
+	//node = create_queue.node;
+	flags = create_queue.flags;
+
+	printk(KERN_INFO "create_queue 4");
+	/*
+	 * Validate that 'head' and 'tail' are large enough to distinguish
+	 * between an empty and full queue. In other words when the queue
+	 * goes from empty to full we want to guarantee that 'head' will
+	 * not rollover 'tail'.
+	 */
+	//BUILD_BUG_ON(
+	//	GHOST_MAX_QUEUE_ELEMS >=
+	//	    ((typeof(((struct ghost_ring *)0)->head))~0UL)
+	//);
+
+	if (elems > GHOST_MAX_QUEUE_ELEMS || !is_power_of_2(elems))
+		return -EINVAL;
+	printk(KERN_INFO "create_queue 5");
+
+	if (flags & ~valid_flags)
+		return -EINVAL;
+	printk(KERN_INFO "create_queue 6");
+
+	//if (node < 0 || node >= nr_node_ids || !node_online(node))
+	//	return -EINVAL;
+
+	//size = sizeof(struct ghost_queue_header) + sizeof(struct ghost_ring);
+	// nelems, readptr, writeptr
+	size = sizeof(struct ghost_queue_header);
+	size += elems * msg_size;
+	size = PAGE_ALIGN(size);
+
+	error = put_user(size, &arg->mapsize);
+	if (error)
+		return error;
+	printk(KERN_INFO "create_queue 7");
+
+	//q = kzalloc_node(sizeof(struct ghost_queue), GFP_KERNEL, node);
+	q = kzalloc(sizeof(struct ghost_queue), GFP_KERNEL);
+	if (!q) {
+		error = -ENOMEM;
+		return error;
+	}
+
+	printk(KERN_INFO "create_queue 8");
+	//spin_lock_init(&q->lock);
+	kref_init(&q->kref); /* sets to 1; inode gets its own reference */
+	q->addr = vmalloc_user(size);
+	//q->addr = vmalloc_user_node_flags(size, node, GFP_KERNEL);
+	if (!q->addr) {
+		error = -ENOMEM;
+		goto err_vmalloc;
+	}
+	printk(KERN_INFO "create_queue 9");
+
+	h = q->addr;
+	//h->version = GHOST_QUEUE_VERSION;
+	//h->start = sizeof(struct ghost_queue_header);
+	// I think alignment is probably ok
+	h->offset = sizeof(struct ghost_queue_header);
+	h->nelems = elems;
+	h->head = 0;
+	h->tail = 0;
+	printk(KERN_INFO "create_queue 9.1");
+
+	/*
+	 * The queue mapping is writeable so we cannot trust anything
+	 * in the header after it is mapped by the agent.
+	 *
+	 * Stash a pointer to the ring and number of elements below.
+	 */
+	//q->ring = (struct ghost_ring *)((char *)h + h->start);
+	//q->ring = q->addr;
+	//q->ring->msgs = q->ring + sizeof(ghost_ring);
+	//q->ring->nelems = elems;
+	//q->ring->head = 0;
+	//q->ring->tail = 0;
+	//q->ring = vmalloc_user(size);
+	q->policy = policy;
+	q->nelems = elems;
+	q->mapsize = size;
+	q->msg_size = msg_size;
+	q->mask = elems - 1;
+	printk(KERN_INFO "create_queue 9.2");
+	printk(KERN_INFO "buffer %p", q->addr);
+	printk(KERN_INFO "queue size %d", sizeof(struct ghost_queue_header));
+	printk(KERN_INFO "h->offset %d", h->offset);
+	printk(KERN_INFO "h->nelems %d", h->nelems);
+	printk(KERN_INFO "h->head %d", h->head);
+	printk(KERN_INFO "h->tail %d", h->tail);
+
+	fd = anon_inode_getfd("[ghost_record]", &queue_fops, q,
+			      O_RDWR | O_CLOEXEC);
+	agent->record_queue = q;
+	printk(KERN_INFO "create_queue 9.3");
+	if (fd < 0) {
+		error = fd;
+		goto err_getfd;
+	}
+
+	printk(KERN_INFO "create_queue 10");
+	//kref_get(&e->kref);
+	//q->enclave = e;
+	INIT_WORK(&q->free_work, __record_free_work);
+
+	return fd;
+
+err_getfd:
+	vfree(q->addr);
+err_vmalloc:
+	kfree(q);
+	return error;
+}
+
 //int ghost_create_queue(struct ghost_enclave *e,
 //int ghost_create_queue(
 //		       struct ghost_ioc_create_queue __user *arg)
@@ -4227,7 +4484,9 @@ static int _produce(uint32_t barrier, int type,
 			read_lock(&agent_type->agent_lock);
 		}
 		//printk(KERN_INFO "calling message send");
-		agent_type->process_message(agent_type->agent, type, msglen, barrier, payload, payload_size, &ret);
+		agent_type->process_message(agent_type->agent,
+				type, msglen, barrier,
+				payload, payload_size, &ret);
 		//printk(KERN_INFO "got ret %d\n", ret);
 		if (lock) {
 			read_unlock(&agent_type->agent_lock);
@@ -4357,6 +4616,10 @@ static inline int __produce_for_task(struct ghost_agent_type *agent_type,
 	case MSG_UNREGISTER_QUEUE:
 		payload = &msg->unreg_queue;
 		payload_size = sizeof(msg->unreg_queue);
+		break;
+	case MSG_CLEANUP:
+		payload = &msg->cleanup;
+		payload_size = sizeof(msg->cleanup);
 		break;
 	default:
 		WARN(1, "unknown bpg_ghost_msg type %d!\n", msg->type);

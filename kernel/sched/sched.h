@@ -250,6 +250,8 @@ extern int bento_create_queue(int policy,
 			      struct bento_ioc_create_queue __user *arg);
 extern int bento_enter_queue(int policy,
 			      struct bento_ioc_enter_queue __user *arg);
+extern int bento_create_record(int policy,
+			      struct bento_ioc_create_queue __user *arg);
 //extern int ghost_associate_queue(struct ghost_ioc_assoc_queue __user *arg);
 extern int ghost_set_default_queue(
 			struct ghost_ioc_set_default_queue __user *arg);

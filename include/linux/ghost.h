@@ -28,7 +28,10 @@ struct ghost_agent_type {
 	int policy;
 	uint32_t msg_size;
 	const void *agent;
-	void (*process_message) (const void* agent, int type, int msglen, uint32_t barrier,
+	//struct file *record_file;
+	struct ghost_queue *record_queue;
+	void (*process_message) (const void* agent,
+			int type, int msglen, uint32_t barrier,
 			void *payload, int payload_size, int *retval);
 	struct module *owner;
 	rwlock_t agent_lock;
@@ -155,6 +158,8 @@ struct ghost_queue *fd_to_queue(struct fd f);
 //		                       int (*func)(int type, int msglen,
 //					       uint32_t barrier, void *payload,
 //					       int payload_size));
+
+int file_write_deferred(int policy, char *buf);
 
 // NOLINTEND
 
