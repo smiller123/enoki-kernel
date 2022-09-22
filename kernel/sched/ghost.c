@@ -2018,7 +2018,7 @@ static void __record_free_work(struct work_struct *work)
 	struct ghost_queue *q = container_of(work, struct ghost_queue,
 					     free_work);
 	struct ghost_agent_type **agent_ptr = find_ghost_agent(q->policy);
-	struct ghost_agent_type *agent;
+	struct ghost_agent_type *agent = *agent_ptr;
 	agent->record_queue = NULL;
 	vfree(q->addr);
 	kfree(q);
