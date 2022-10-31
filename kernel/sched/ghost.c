@@ -3847,6 +3847,45 @@ err_vmalloc:
 //}
 //EXPORT_SYMBOL(ghost_queue_register_process_func);
 
+int ekiben_send_hint(int policy,
+		       void __user *user_arg)
+{
+	struct bpf_ghost_msg msg;
+	struct bpf_ghost_msg msg2;
+	struct ghost_msg_payload_msg_size *msg_size_payload;
+	struct ghost_msg_payload_send_hint *send_hint_payload;
+	uint32_t msg_size;
+	struct ghost_agent_type *agent;
+	struct ghost_agent_type **agent_ptr = find_ghost_agent(policy);
+	void *arg;
+	if (!(*agent_ptr)) {
+		return -EBADF;
+	}
+	agent = *agent_ptr;
+
+	memset(&msg, 0, sizeof(msg));
+	msg_size_payload = &msg.msg_size;
+	msg.type = MSG_MSG_SIZE;
+
+	produce_for_agent_type(agent, &msg);
+	msg_size = msg_size_payload->msg_size;
+	if (!msg_size) {
+		return -EINVAL;
+	}
+	arg = kzalloc(msg_size, GFP_KERNEL);
+	if (copy_from_user(arg, user_arg,
+			   msg_size))
+		return -EFAULT;
+
+	memset(&msg2, 0, sizeof(msg2));
+	send_hint_payload = &msg2.send_hint;
+	msg2.type = MSG_SEND_HINT;
+	send_hint_payload->arg = arg;
+
+	produce_for_agent_type(agent, &msg2);
+	return 0;
+}
+
 static struct task_struct *find_task_by_gtid(gtid_t gtid)
 {
 	struct task_struct *p;
@@ -4604,6 +4643,10 @@ static inline int __produce_for_task(struct ghost_agent_type *agent_type,
 	case MSG_MSG_SIZE:
 		payload = &msg->msg_size;
 		payload_size = sizeof(msg->msg_size);
+		break;
+	case MSG_SEND_HINT:
+		payload = &msg->send_hint;
+		payload_size = sizeof(msg->send_hint);
 		break;
 	case MSG_CREATE_QUEUE:
 		payload = &msg->create_queue;

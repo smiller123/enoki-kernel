@@ -5291,6 +5291,9 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 {
 	const struct sched_class *class;
 	struct task_struct *p;
+	//if (prev->policy == SCHED_GHOST) {
+	//	printk("Last was ghost, pick next task");
+	//}
 
 #ifdef CONFIG_SCHED_CLASS_GHOST
 	rq->ghost.check_prev_preemption = ghost_produce_prev_msgs(rq, prev);
@@ -5330,8 +5333,14 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 	}
 
 restart:
+	//if (prev->policy == SCHED_GHOST) {
+	//	printk("Last was ghost, balancing");
+	//}
 	put_prev_task_balance(rq, prev, rf);
 
+	//if (prev->policy == SCHED_GHOST) {
+	//	printk("Last was ghost, actually picking");
+	//}
 	for_each_class(class) {
 		p = class->pick_next_task(rq);
 		if (p) {
@@ -8346,14 +8355,19 @@ void __init sched_init(void)
 	int i;
 
 	/* Make sure the linker didn't screw up */
-	BUG_ON(&fair_sched_class + 1 != &rt_sched_class ||
-	       &rt_sched_class + 1   != &dl_sched_class);
+	//BUG_ON(&fair_sched_class + 1 != &rt_sched_class ||
+	 //      &rt_sched_class + 1   != &dl_sched_class);
 #ifdef CONFIG_SCHED_CLASS_GHOST
-	BUG_ON(&idle_sched_class + 1 != &ghost_sched_class ||
-	       &ghost_sched_class + 1 != &fair_sched_class );
+	BUG_ON(&fair_sched_class + 1 != &ghost_sched_class ||
+	       &ghost_sched_class + 1   != &rt_sched_class);
+	BUG_ON(&ghost_sched_class + 1 != &rt_sched_class ||
+	       &rt_sched_class + 1 != &dl_sched_class );
 	       //&dl_sched_class + 1 != &ghost_agent_sched_class ||
 	       //&ghost_agent_sched_class + 1 != &stop_sched_class);
+	BUG_ON(&idle_sched_class + 1 != &fair_sched_class);
 #else
+	BUG_ON(&fair_sched_class + 1 != &rt_sched_class ||
+	       &rt_sched_class + 1   != &dl_sched_class);
 	BUG_ON(&idle_sched_class + 1 != &fair_sched_class);
 #ifdef CONFIG_SMP
 	BUG_ON(&dl_sched_class + 1 != &stop_sched_class);

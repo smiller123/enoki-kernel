@@ -186,6 +186,7 @@ struct ghost_ioc_timerfd_settime {
 #define GHOST_IOC_TIMERFD_SETTIME	_IOWR('g', 10, struct ghost_ioc_timerfd_settime)
 #define GHOST_IOC_ENTER_QUEUE		_IOWR('g', 11, struct bento_ioc_enter_queue)
 #define GHOST_IOC_CREATE_RECORD		_IOWR('g', 12, struct bento_ioc_create_queue)
+#define EKIBEN_IOC_SEND_HINT		_IOWR('g', 12, const void __user *)
 
 /*
  * Status word region APIs.
@@ -287,6 +288,7 @@ enum {
 	MSG_REREGISTER_PREPARE,
 	MSG_REREGISTER_INIT,
 	MSG_MSG_SIZE,
+	MSG_SEND_HINT,
 	MSG_CREATE_QUEUE,
 	MSG_ENTER_QUEUE,
 	MSG_UNREGISTER_QUEUE,
@@ -430,6 +432,10 @@ struct ghost_msg_payload_msg_size {
 	uint32_t msg_size;
 };
 
+struct ghost_msg_payload_send_hint {
+	void *arg;
+};
+
 struct ghost_msg_payload_create_queue {
 	void *q;
 };
@@ -468,6 +474,7 @@ struct bpf_ghost_msg {
 		struct ghost_msg_payload_rereg_prep	rereg_prep;
 		struct ghost_msg_payload_rereg_init	rereg_init;
 		struct ghost_msg_payload_msg_size	msg_size;
+		struct ghost_msg_payload_send_hint	send_hint;
 		struct ghost_msg_payload_create_queue	create_queue;
 		struct ghost_msg_payload_enter_queue	enter_queue;
 		struct ghost_msg_payload_unreg_queue	unreg_queue;

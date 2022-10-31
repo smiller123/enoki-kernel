@@ -252,6 +252,8 @@ extern int bento_enter_queue(int policy,
 			      struct bento_ioc_enter_queue __user *arg);
 extern int bento_create_record(int policy,
 			      struct bento_ioc_create_queue __user *arg);
+extern int ekiben_send_hint(int policy,
+			      void __user *arg);
 //extern int ghost_associate_queue(struct ghost_ioc_assoc_queue __user *arg);
 extern int ghost_set_default_queue(
 			struct ghost_ioc_set_default_queue __user *arg);
@@ -2226,11 +2228,11 @@ extern struct sched_class __end_sched_classes[];
 extern const struct sched_class stop_sched_class;
 extern const struct sched_class dl_sched_class;
 extern const struct sched_class rt_sched_class;
+extern const struct sched_class ghost_sched_class;
 extern const struct sched_class fair_sched_class;
 extern const struct sched_class idle_sched_class;
 #ifdef CONFIG_SCHED_CLASS_GHOST
 extern const struct sched_class ghost_agent_sched_class;
-extern const struct sched_class ghost_sched_class;
 
 static inline bool ghost_class(const struct sched_class *class)
 {
