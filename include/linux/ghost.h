@@ -159,7 +159,7 @@ struct ghost_queue *fd_to_queue(struct fd f);
 //					       uint32_t barrier, void *payload,
 //					       int payload_size));
 
-int file_write_deferred(int policy, char *buf);
+int file_write_deferred(char *buf);
 
 // NOLINTEND
 

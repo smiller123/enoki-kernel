@@ -353,6 +353,12 @@ static int gf_ctl_show(struct seq_file *sf, void *v)
 	return 0;
 }
 
+static int gf_top_ctl_show(struct seq_file *sf, void *v)
+{
+	seq_printf(sf, "0");
+	return 0;
+}
+
 /* Called from the scheduler when it destroys the enclave. */
 //void ghostfs_remove_enclave(struct ghost_enclave *e)
 //{
@@ -519,6 +525,13 @@ static long gf_ctl_ioctl(struct kernfs_open_file *of, unsigned int cmd,
 		//return ghost_create_queue(e,
 		//		(struct ghost_ioc_create_queue __user *)arg);
 	}
+	if (cmd == GHOST_IOC_CREATE_REV_QUEUE) {
+		//return 0;
+		return bento_create_reverse_queue(policy,
+				(struct bento_ioc_create_queue __user *)arg);
+		//return ghost_create_queue(e,
+		//		(struct ghost_ioc_create_queue __user *)arg);
+	}
 	if (cmd == GHOST_IOC_ENTER_QUEUE) {
 		//return 0;
 		return bento_enter_queue(policy,
@@ -560,6 +573,49 @@ static long gf_ctl_ioctl(struct kernfs_open_file *of, unsigned int cmd,
 //				(struct ghost_ioc_timerfd_settime __user *)arg);
 //	}
 //	return -ENOIOCTLCMD;
+	return 0;
+}
+
+static long gf_top_ctl_ioctl(struct kernfs_open_file *of, unsigned int cmd,
+			 unsigned long arg)
+{
+//	struct ghost_enclave *e = of_to_e(of);
+	//int policy = of_to_policy(of);
+	printk(KERN_INFO "got into ioctl cmd %d", cmd);
+//
+//	if (!(of->file->f_mode & FMODE_WRITE))
+//		return -EACCES;
+//	if (cmd == GHOST_IOC_CREATE_QUEUE) {
+//		//return 0;
+//		return bento_create_queue(policy,
+//				(struct bento_ioc_create_queue __user *)arg);
+//		//return ghost_create_queue(e,
+//		//		(struct ghost_ioc_create_queue __user *)arg);
+//	}
+//	if (cmd == GHOST_IOC_CREATE_REV_QUEUE) {
+//		//return 0;
+//		return bento_create_reverse_queue(policy,
+//				(struct bento_ioc_create_queue __user *)arg);
+//		//return ghost_create_queue(e,
+//		//		(struct ghost_ioc_create_queue __user *)arg);
+//	}
+//	if (cmd == GHOST_IOC_ENTER_QUEUE) {
+//		//return 0;
+//		return bento_enter_queue(policy,
+//				(struct bento_ioc_enter_queue __user *)arg);
+//		//return ghost_create_queue(e,
+//		//		(struct ghost_ioc_create_queue __user *)arg);
+//	}
+	if (cmd == GHOST_IOC_CREATE_RECORD) {
+		//return 0;
+		return bento_create_top_record(
+				(struct bento_ioc_create_queue __user *)arg);
+		//return ghost_create_queue(e,
+		//		(struct ghost_ioc_create_queue __user *)arg);
+	}
+//	if (cmd == EKIBEN_IOC_SEND_HINT) {
+//		return ekiben_send_hint(policy, (void __user *) arg);
+//	}
 	return 0;
 }
 
@@ -982,9 +1038,14 @@ out_e:
 //	return -EINVAL;
 //}
 
-//static struct kernfs_ops gf_ops_top_ctl = {
+static struct kernfs_ops gf_ops_top_ctl = {
 //	.write			= gf_top_ctl_write,
-//};
+	.open			= gf_ctl_open,
+	.release		= gf_ctl_release,
+	.seq_show		= gf_top_ctl_show,
+	.write			= gf_ctl_write,
+	.ioctl			= gf_top_ctl_ioctl,
+};
 
 //static int gf_top_version_show(struct seq_file *sf, void *v)
 //{
@@ -996,19 +1057,19 @@ out_e:
 //	.seq_show		= gf_top_version_show,
 //};
 //
-//static struct gf_dirent top_dirtab[] = {
-//	{
-//		.name		= "ctl",
-//		.mode		= 0660,
-//		.ops		= &gf_ops_top_ctl,
-//	},
+static struct gf_dirent top_dirtab[] = {
+	{
+		.name		= "ctl",
+		.mode		= 0664,
+		.ops		= &gf_ops_top_ctl,
+	},
 //	{
 //		.name		= "version",
 //		.mode		= 0444,
 //		.ops		= &gf_ops_top_version,
 //	},
-//	{0}
-//};
+	{0}
+};
 
 /*
  * Most gf_dirent file sizes are not known at compile time.  Most don't matter
@@ -1036,11 +1097,11 @@ static int __init ghost_setup_root(void)
 	if (IS_ERR(fs_root))
 		return PTR_ERR(fs_root);
 
-	//ret = gf_add_files(fs_root->kn, top_dirtab, NULL);
-	//if (ret) {
-	//	kernfs_destroy_root(fs_root);
-	//	return ret;
-	//}
+	ret = gf_add_files(fs_root->kn, top_dirtab, NULL);
+	if (ret) {
+		kernfs_destroy_root(fs_root);
+		return ret;
+	}
 
 	ghost_kfs_root = fs_root;
 

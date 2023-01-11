@@ -248,9 +248,13 @@ extern int ghost_cpu_data_mmap(struct file *file, struct vm_area_struct *vma,
 //			      struct ghost_ioc_create_queue __user *arg);
 extern int bento_create_queue(int policy,
 			      struct bento_ioc_create_queue __user *arg);
+extern int bento_create_reverse_queue(int policy,
+			      struct bento_ioc_create_queue __user *arg);
 extern int bento_enter_queue(int policy,
 			      struct bento_ioc_enter_queue __user *arg);
 extern int bento_create_record(int policy,
+			      struct bento_ioc_create_queue __user *arg);
+extern int bento_create_top_record(
 			      struct bento_ioc_create_queue __user *arg);
 extern int ekiben_send_hint(int policy,
 			      void __user *arg);
