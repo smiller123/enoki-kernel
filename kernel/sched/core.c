@@ -408,6 +408,30 @@ void hrtick_start(struct rq *rq, u64 delay)
 	else
 		smp_call_function_single_async(cpu_of(rq), &rq->hrtick_csd);
 }
+EXPORT_SYMBOL(hrtick_start);
+
+void hrtick_start_cpu(int cpu, u64 delay)
+{
+	struct rq *rq = cpu_rq(cpu);
+	struct hrtimer *timer = &rq->hrtick_timer;
+	ktime_t time;
+	s64 delta;
+
+	/*
+	 * Don't schedule slices shorter than 10000ns, that just
+	 * doesn't make sense and can cause timer DoS.
+	 */
+	delta = max_t(s64, delay, 10000LL);
+	time = ktime_add_ns(timer->base->get_time(), delta);
+
+	hrtimer_set_expires(timer, time);
+
+	if (rq == this_rq())
+		__hrtick_restart(rq);
+	else
+		smp_call_function_single_async(cpu_of(rq), &rq->hrtick_csd);
+}
+EXPORT_SYMBOL(hrtick_start_cpu);
 
 #else
 /*
@@ -425,6 +449,7 @@ void hrtick_start(struct rq *rq, u64 delay)
 	hrtimer_start(&rq->hrtick_timer, ns_to_ktime(delay),
 		      HRTIMER_MODE_REL_PINNED_HARD);
 }
+EXPORT_SYMBOL(hrtick_start);
 
 #endif /* CONFIG_SMP */
 
@@ -632,6 +657,19 @@ void resched_curr(struct rq *rq)
 	else
 		trace_sched_wake_idle_without_ipi(cpu);
 }
+EXPORT_SYMBOL(resched_curr);
+
+void resched_cpu_no_lock(int cpu)
+{
+	struct rq *rq = cpu_rq(cpu);
+	//unsigned long flags;
+
+	//raw_spin_lock_irqsave(&rq->lock, flags);
+	if (cpu_online(cpu) || cpu == smp_processor_id())
+		resched_curr(rq);
+	//raw_spin_unlock_irqrestore(&rq->lock, flags);
+}
+EXPORT_SYMBOL(resched_cpu_no_lock);
 
 void resched_cpu(int cpu)
 {
@@ -643,6 +681,7 @@ void resched_cpu(int cpu)
 		resched_curr(rq);
 	raw_spin_unlock_irqrestore(&rq->lock, flags);
 }
+EXPORT_SYMBOL(resched_cpu);
 
 #ifdef CONFIG_SMP
 /*
@@ -4602,11 +4641,11 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	//printk(KERN_INFO "context_switch next %p\n", next);
 	//printk(KERN_INFO "context_switch rf %p\n", rf);
 	//}
-	struct timespec64 start;
-	ktime_get_real_ts64(&start);
+	//struct timespec64 start;
+	//ktime_get_real_ts64(&start);
 	prepare_task_switch(rq, prev, next);
-	struct timespec64 step1;
-	ktime_get_real_ts64(&step1);
+	//struct timespec64 step1;
+	//ktime_get_real_ts64(&step1);
 
 	/*
 	 * For paravirt, this is coupled with an exit in switch_to to
@@ -4678,8 +4717,8 @@ context_switch(struct rq *rq, struct task_struct *prev,
 		//printk(KERN_INFO "context_switch 5 rf %p\n", rf);
 		//}
 	}
-	struct timespec64 step2;
-	ktime_get_real_ts64(&step2);
+	//struct timespec64 step2;
+	//ktime_get_real_ts64(&step2);
 	//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
 	//printk(KERN_INFO "context_switch 6 rq %p\n", rq);
 	//printk(KERN_INFO "context_switch 6 prev %p\n", prev);
@@ -4690,13 +4729,13 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
 
 	prepare_lock_switch(rq, next, rf);
-	struct timespec64 step21;
-	ktime_get_real_ts64(&step21);
+	//struct timespec64 step21;
+	//ktime_get_real_ts64(&step21);
 
 	/* Here we just switch the register state and the stack. */
 	switch_to(prev, next, prev);
-	struct timespec64 step22;
-	ktime_get_real_ts64(&step22);
+	//struct timespec64 step22;
+	//ktime_get_real_ts64(&step22);
 	barrier();
 	//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
 	//printk(KERN_INFO "context_switch 7 rq %p\n", rq);
@@ -4704,36 +4743,36 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	//printk(KERN_INFO "context_switch 7 next %p\n", next);
 	//printk(KERN_INFO "context_switch 7 rf %p\n", rf);
 	//}
-	struct timespec64 step3;
-	ktime_get_real_ts64(&step3);
+	//struct timespec64 step3;
+	//ktime_get_real_ts64(&step3);
 
 	ret = finish_task_switch(prev);
-	struct timespec64 end;
+	//struct timespec64 end;
 	//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
 	//printk(KERN_INFO "context_switch end rq %p\n", rq);
 	//printk(KERN_INFO "context_switch end prev %p\n", prev);
 	//printk(KERN_INFO "context_switch end next %p\n", next);
 	//printk(KERN_INFO "context_switch end rf %p\n", rf);
 	//}
-	if (report_timing % 10000 == 0) {
-		ktime_get_real_ts64(&end);
-		struct timespec64 diff = timespec64_sub(end, start);
-		struct timespec64 diff1 = timespec64_sub(step1, start);
-		struct timespec64 diff2 = timespec64_sub(step2, step1);
-		struct timespec64 diff3 = timespec64_sub(step21, step2);
-		struct timespec64 diff4 = timespec64_sub(step22, step21);
-		struct timespec64 diff5 = timespec64_sub(step3, step22);
-		struct timespec64 diff6 = timespec64_sub(end, step3);
-		s64 ns_diff = timespec64_to_ns(&diff);
-		s64 ns_diff1 = timespec64_to_ns(&diff1);
-		s64 ns_diff2 = timespec64_to_ns(&diff2);
-		s64 ns_diff3 = timespec64_to_ns(&diff3);
-		s64 ns_diff4 = timespec64_to_ns(&diff4);
-		s64 ns_diff5 = timespec64_to_ns(&diff5);
-		s64 ns_diff6 = timespec64_to_ns(&diff6);
-		printk(KERN_INFO "context_switch diff %d, %d %d %d %d %d %d\n", ns_diff, ns_diff1, ns_diff2, ns_diff3, ns_diff4, ns_diff5, ns_diff6);
-	      //do_report_timing = false;
-	}
+	//if (report_timing % 10000 == 0) {
+	//	ktime_get_real_ts64(&end);
+	//	struct timespec64 diff = timespec64_sub(end, start);
+	//	struct timespec64 diff1 = timespec64_sub(step1, start);
+	//	struct timespec64 diff2 = timespec64_sub(step2, step1);
+	//	struct timespec64 diff3 = timespec64_sub(step21, step2);
+	//	struct timespec64 diff4 = timespec64_sub(step22, step21);
+	//	struct timespec64 diff5 = timespec64_sub(step3, step22);
+	//	struct timespec64 diff6 = timespec64_sub(end, step3);
+	//	s64 ns_diff = timespec64_to_ns(&diff);
+	//	s64 ns_diff1 = timespec64_to_ns(&diff1);
+	//	s64 ns_diff2 = timespec64_to_ns(&diff2);
+	//	s64 ns_diff3 = timespec64_to_ns(&diff3);
+	//	s64 ns_diff4 = timespec64_to_ns(&diff4);
+	//	s64 ns_diff5 = timespec64_to_ns(&diff5);
+	//	s64 ns_diff6 = timespec64_to_ns(&diff6);
+	//	//printk(KERN_INFO "context_switch diff %d, %d %d %d %d %d %d\n", ns_diff, ns_diff1, ns_diff2, ns_diff3, ns_diff4, ns_diff5, ns_diff6);
+	//      //do_report_timing = false;
+	//}
 	//report_timing += 1;
 	return ret;
 }
@@ -5418,8 +5457,8 @@ static void __sched notrace __schedule(bool preempt)
 	struct rq_flags rf;
 	struct rq *rq;
 	int cpu;
-	struct timespec64 start, end;
-	ktime_get_real_ts64(&start);
+	//struct timespec64 start, end;
+	//ktime_get_real_ts64(&start);
 
 	cpu = smp_processor_id();
 	rq = cpu_rq(cpu);
@@ -5497,17 +5536,17 @@ static void __sched notrace __schedule(bool preempt)
 		}
 		switch_count = &prev->nvcsw;
 	}
-	struct timespec64 step1;
-	ktime_get_real_ts64(&step1);
+	//struct timespec64 step1;
+	//ktime_get_real_ts64(&step1);
 
 	next = pick_next_task(rq, prev, &rf);
 	//if (next->policy != SCHED_GHOST || cpu_of(rq) != 1) {
 	clear_tsk_need_resched(prev);
 	clear_preempt_need_resched();
-	struct timespec64 step2;
-	ktime_get_real_ts64(&step2);
-	struct timespec64 step3;
-	struct timespec64 step4;
+	//struct timespec64 step2;
+	//ktime_get_real_ts64(&step2);
+	//struct timespec64 step3;
+	//struct timespec64 step4;
 
 	if (likely(prev != next)) {
 		//if (do_report_timing > 0) {
@@ -5541,11 +5580,11 @@ static void __sched notrace __schedule(bool preempt)
 			trace_sched_switch(preempt, prev, next);
 
 		/* Also unlocks the rq: */
-		ktime_get_real_ts64(&step3);
+	//	ktime_get_real_ts64(&step3);
 		//if (next->policy != SCHED_GHOST || cpu_of(rq) != 1) {
 			rq = context_switch(rq, prev, next, &rf);
 		//}
-		ktime_get_real_ts64(&step4);
+	//	ktime_get_real_ts64(&step4);
 	} else {
 		//if (do_report_timing > 0) {
 		//	printk(KERN_INFO "not switching\n");
@@ -5560,25 +5599,25 @@ static void __sched notrace __schedule(bool preempt)
 	//		printk(KERN_INFO "didn't context switch");
 	//	}
 	schedule_callback(rq);
-	if (report_timing % 10000 == 0) {
-		ktime_get_real_ts64(&end);
-		struct timespec64 diff = timespec64_sub(end, start);
-		struct timespec64 diff1 = timespec64_sub(step1, start);
-		struct timespec64 diff2 = timespec64_sub(step2, step1);
-		struct timespec64 diff3 = timespec64_sub(step3, step2);
-		struct timespec64 diff4 = timespec64_sub(step4, step3);
-		struct timespec64 diff5 = timespec64_sub(end, step4);
-		s64 ns_diff = timespec64_to_ns(&diff);
-		s64 ns_diff1 = timespec64_to_ns(&diff1);
-		s64 ns_diff2 = timespec64_to_ns(&diff2);
-		s64 ns_diff3 = timespec64_to_ns(&diff3);
-		s64 ns_diff4 = timespec64_to_ns(&diff4);
-		s64 ns_diff5 = timespec64_to_ns(&diff5);
-		printk(KERN_INFO "diff %d, %d %d %d %d %d \n", ns_diff, ns_diff1, ns_diff2, ns_diff3, ns_diff4, ns_diff5);
-	//	report_timing += 1;
-      	//do_report_timing = false;
-	}
-	report_timing += 1;
+	//if (report_timing % 10000 == 0) {
+	//	ktime_get_real_ts64(&end);
+	//	struct timespec64 diff = timespec64_sub(end, start);
+	//	struct timespec64 diff1 = timespec64_sub(step1, start);
+	//	struct timespec64 diff2 = timespec64_sub(step2, step1);
+	//	struct timespec64 diff3 = timespec64_sub(step3, step2);
+	//	struct timespec64 diff4 = timespec64_sub(step4, step3);
+	//	struct timespec64 diff5 = timespec64_sub(end, step4);
+	//	s64 ns_diff = timespec64_to_ns(&diff);
+	//	s64 ns_diff1 = timespec64_to_ns(&diff1);
+	//	s64 ns_diff2 = timespec64_to_ns(&diff2);
+	//	s64 ns_diff3 = timespec64_to_ns(&diff3);
+	//	s64 ns_diff4 = timespec64_to_ns(&diff4);
+	//	s64 ns_diff5 = timespec64_to_ns(&diff5);
+	//	printk(KERN_INFO "diff %d, %d %d %d %d %d \n", ns_diff, ns_diff1, ns_diff2, ns_diff3, ns_diff4, ns_diff5);
+	////	report_timing += 1;
+      	////do_report_timing = false;
+	//}
+	//report_timing += 1;
 }
 
 void __noreturn do_task_dead(void)
@@ -6287,7 +6326,7 @@ static void __setscheduler(struct rq *rq, struct task_struct *p,
 //
 #ifdef CONFIG_SCHED_CLASS_GHOST
 	if (ghost_policy(attr->sched_policy)) {
-		printk(KERN_INFO "setting sched policy");
+		//printk(KERN_INFO "setting sched policy");
 		p->sched_class = &ghost_sched_class;
 		return;
 	}
@@ -6338,7 +6377,7 @@ static int __sched_setscheduler(struct task_struct *p,
 
 	/* The pi code expects interrupts enabled */
 	BUG_ON(pi && in_interrupt());
-	printk(KERN_INFO "setting scheduler");
+	//printk(KERN_INFO "setting scheduler");
 recheck:
 	/* Double check policy once rq lock held: */
 	if (policy < 0) {
@@ -6356,7 +6395,7 @@ recheck:
 
 #ifdef CONFIG_SCHED_CLASS_GHOST
 	if (ghost_policy(policy)) {
-		printk(KERN_INFO "yes ghost policy");
+		//printk(KERN_INFO "yes ghost policy");
 		retval = ghost_validate_sched_attr(attr);
 		if (retval)
 			return retval;
@@ -6375,7 +6414,7 @@ recheck:
 		    (rt_policy(policy) != (attr->sched_priority != 0)))
 			return -EINVAL;
 	}
-	printk(KERN_INFO "setscheduler 1");
+	//printk(KERN_INFO "setscheduler 1");
 
 	/*
 	 * Allow unprivileged RT tasks to decrease priority:
@@ -6427,7 +6466,7 @@ recheck:
 		if (p->sched_reset_on_fork && !reset_on_fork)
 			return -EPERM;
 	}
-	printk(KERN_INFO "setscheduler 2");
+	//printk(KERN_INFO "setscheduler 2");
 
 	if (user) {
 		if (attr->sched_flags & SCHED_FLAG_SUGOV)
@@ -6437,7 +6476,7 @@ recheck:
 		if (retval)
 			return retval;
 	}
-	printk(KERN_INFO "setscheduler 3");
+	//printk(KERN_INFO "setscheduler 3");
 
 	/* Update task specific "requested" clamps */
 	if (attr->sched_flags & SCHED_FLAG_UTIL_CLAMP) {
@@ -6448,7 +6487,7 @@ recheck:
 
 	if (pi)
 		cpuset_read_lock();
-	printk(KERN_INFO "setscheduler 4");
+	//printk(KERN_INFO "setscheduler 4");
 
 	/*
 	 * Make sure no PI-waiters arrive (or leave) while we are
@@ -6469,7 +6508,7 @@ recheck:
 		goto unlock;
 	}
 
-	printk(KERN_INFO "setscheduler 5");
+	//printk(KERN_INFO "setscheduler 5");
 	/*
 	 * If not changing anything there's no need to proceed further,
 	 * but store a possible modification of reset_on_fork.
@@ -6500,7 +6539,7 @@ recheck:
 	//}
 change:
 
-	printk(KERN_INFO "setscheduler 6");
+	//printk(KERN_INFO "setscheduler 6");
 	if (user) {
 #ifdef CONFIG_RT_GROUP_SCHED
 		/*
@@ -6532,7 +6571,7 @@ change:
 		}
 #endif
 	}
-	printk(KERN_INFO "setscheduler 7");
+	//printk(KERN_INFO "setscheduler 7");
 
 	/* Re-check policy now with rq lock held: */
 	if (unlikely(oldpolicy != -1 && oldpolicy != p->policy)) {
@@ -6552,7 +6591,7 @@ change:
 		retval = -EBUSY;
 		goto unlock;
 	}
-	printk(KERN_INFO "setscheduler 8");
+	//printk(KERN_INFO "setscheduler 8");
 
 #ifdef CONFIG_SCHED_CLASS_GHOST
 	//if (ghost_policy(policy)) {
@@ -6563,7 +6602,7 @@ change:
 	//	new_e = NULL;
 	//}
 	if (ghost_policy(policy) || ghost_policy(p->policy)) {
-		printk(KERN_INFO "setting ghost scheduler");
+		//printk(KERN_INFO "setting ghost scheduler");
 		int error = ghost_setscheduler(p, rq, attr,
 					       &reset_on_fork);
 
@@ -6666,7 +6705,7 @@ static int _sched_setscheduler(struct task_struct *p, int policy,
 		.sched_priority = param->sched_priority,
 		.sched_nice	= PRIO_TO_NICE(p->static_prio),
 	};
-	printk(KERN_INFO "in _sched_setscheduler");
+	//printk(KERN_INFO "in _sched_setscheduler");
 
 	/* Fixup the legacy SCHED_RESET_ON_FORK hack. */
 	if ((policy != SETPARAM_POLICY) && (policy & SCHED_RESET_ON_FORK)) {
@@ -6692,7 +6731,7 @@ static int _sched_setscheduler(struct task_struct *p, int policy,
 int sched_setscheduler(struct task_struct *p, int policy,
 		       const struct sched_param *param)
 {
-	printk(KERN_INFO "in sched_setscheduler");
+	//printk(KERN_INFO "in sched_setscheduler");
 	return _sched_setscheduler(p, policy, param, true);
 }
 

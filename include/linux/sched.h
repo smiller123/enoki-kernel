@@ -236,6 +236,10 @@ extern void io_schedule_finish(int token);
 extern long io_schedule_timeout(long timeout);
 extern void io_schedule(void);
 
+extern void resched_curr(struct rq *rq);
+extern void resched_cpu(int cpu);
+extern void resched_cpu_no_lock(int cpu);
+
 /**
  * struct prev_cputime - snapshot of system and user cputime
  * @utime: time spent in user mode
@@ -2208,3 +2212,32 @@ int sched_trace_rq_nr_running(struct rq *rq);
 const struct cpumask *sched_trace_rd_span(struct root_domain *rd);
 
 #endif
+
+#ifdef CONFIG_SCHED_HRTICK
+//
+///*
+// * Use hrtick when:
+// *  - enabled by features
+// *  - hrtimer is actually high res
+// */
+//static inline int hrtick_enabled(struct rq *rq)
+//{
+//	if (!sched_feat(HRTICK))
+//		return 0;
+//	if (!cpu_active(cpu_of(rq)))
+//		return 0;
+//	return hrtimer_is_hres_active(&rq->hrtick_timer);
+//}
+//
+//void hrtick_start_cpu(int cpu, u64 delay);
+
+//void hrtick_start(struct rq *rq, u64 delay);
+//
+//#else
+//
+//static inline int hrtick_enabled(struct rq *rq)
+//{
+//	return 0;
+//}
+//
+#endif /* CONFIG_SCHED_HRTICK */

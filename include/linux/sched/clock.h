@@ -98,4 +98,33 @@ static inline void enable_sched_clock_irqtime(void) {}
 static inline void disable_sched_clock_irqtime(void) {}
 #endif
 
+#ifdef CONFIG_SCHED_HRTICK
+//
+///*
+// * Use hrtick when:
+// *  - enabled by features
+// *  - hrtimer is actually high res
+// */
+//static inline int hrtick_enabled(struct rq *rq)
+//{
+//	if (!sched_feat(HRTICK))
+//		return 0;
+//	if (!cpu_active(cpu_of(rq)))
+//		return 0;
+//	return hrtimer_is_hres_active(&rq->hrtick_timer);
+//}
+//
+void hrtick_start_cpu(int cpu, u64 delay);
+
+void hrtick_start(struct rq *rq, u64 delay);
+//
+//#else
+//
+//static inline int hrtick_enabled(struct rq *rq)
+//{
+//	return 0;
+//}
+//
+#endif /* CONFIG_SCHED_HRTICK */
+
 #endif /* _LINUX_SCHED_CLOCK_H */

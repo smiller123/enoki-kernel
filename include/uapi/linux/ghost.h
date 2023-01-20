@@ -395,6 +395,7 @@ struct ghost_msg_payload_cpu_not_idle {
 
 struct ghost_msg_payload_cpu_tick {
 	int cpu;
+	int queued;
 };
 
 struct ghost_msg_payload_timer {

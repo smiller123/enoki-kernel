@@ -2400,8 +2400,8 @@ extern void init_sched_fair_class(void);
 
 extern void reweight_task(struct task_struct *p, int prio);
 
-extern void resched_curr(struct rq *rq);
-extern void resched_cpu(int cpu);
+//extern void resched_curr(struct rq *rq);
+//extern void resched_cpu(int cpu);
 bool set_nr_and_not_polling(struct task_struct *p);
 #ifdef CONFIG_SMP
 extern void resched_cpu_unlocked(int cpu);
@@ -2547,7 +2547,7 @@ static inline int hrtick_enabled(struct rq *rq)
 	return hrtimer_is_hres_active(&rq->hrtick_timer);
 }
 
-void hrtick_start(struct rq *rq, u64 delay);
+//void hrtick_start(struct rq *rq, u64 delay);
 
 #else
 
