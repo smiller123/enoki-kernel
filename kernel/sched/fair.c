@@ -5683,8 +5683,7 @@ static struct {
 
 static unsigned long cpu_load(struct rq *rq)
 {
-	return cfs_rq_load_avg(&rq->cfs) +
-	       ghost_cfs_added_load(rq);
+	return cfs_rq_load_avg(&rq->cfs);
 }
 
 /*
@@ -5715,13 +5714,12 @@ static unsigned long cpu_load_without(struct rq *rq, struct task_struct *p)
 	/* Discount task's util from CPU's util */
 	lsub_positive(&load, task_h_load(p));
 
-	return load + ghost_cfs_added_load(rq);
+	return load;
 }
 
 static unsigned long cpu_runnable(struct rq *rq)
 {
-	return cfs_rq_runnable_avg(&rq->cfs) +
-	       ghost_cfs_added_load(rq);
+	return cfs_rq_runnable_avg(&rq->cfs);
 }
 
 static unsigned long cpu_runnable_without(struct rq *rq, struct task_struct *p)
@@ -5739,7 +5737,7 @@ static unsigned long cpu_runnable_without(struct rq *rq, struct task_struct *p)
 	/* Discount task's runnable from CPU's runnable */
 	lsub_positive(&runnable, p->se.avg.runnable_avg);
 
-	return runnable + ghost_cfs_added_load(rq);
+	return runnable;
 }
 
 static unsigned long capacity_of(int cpu)
@@ -6729,14 +6727,24 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 	int want_affine = 0;
 	/* SD_flags and WF_flags share the first nibble */
 	int sd_flag = wake_flags & 0xF;
+	//struct timespec64 start;
+	//struct timespec64 end;
+	//ktime_get_real_ts64(&start);
 
 	if (wake_flags & WF_TTWU) {
 		record_wakee(p);
 
 		if (sched_energy_enabled()) {
 			new_cpu = find_energy_efficient_cpu(p, prev_cpu);
-			if (new_cpu >= 0)
+			if (new_cpu >= 0) {
+				//ktime_get_real_ts64(&end);
+				//if (do_report_timing % 100000 == 0) {
+				//	struct timespec64 diff = timespec64_sub(end, start);
+				//	s64 ns_diff = timespec64_to_ns(&diff);
+				//	printk(KERN_INFO "select %d\n", ns_diff);
+				//}
 				return new_cpu;
+			}
 			new_cpu = prev_cpu;
 		}
 
@@ -6775,6 +6783,12 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 			current->recent_used_cpu = cpu;
 	}
 	rcu_read_unlock();
+	//ktime_get_real_ts64(&end);
+	//if (do_report_timing % 100000 == 0) {
+	//	struct timespec64 diff = timespec64_sub(end, start);
+	//	s64 ns_diff = timespec64_to_ns(&diff);
+	//	printk(KERN_INFO "select %d\n", ns_diff);
+	//}
 
 	return new_cpu;
 }
@@ -7038,6 +7052,13 @@ pick_next_task_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf
 	struct sched_entity *se;
 	struct task_struct *p;
 	int new_tasks;
+	//struct timespec64 start;
+	//struct timespec64 step1;
+	//struct timespec64 step11;
+	//struct timespec64 step15;
+	//struct timespec64 step2;
+	//struct timespec64 end;
+	//ktime_get_real_ts64(&start);
 
 again:
 	if (!sched_fair_runnable(rq))
@@ -7146,6 +7167,23 @@ done: __maybe_unused;
 		hrtick_start_fair(rq, p);
 
 	update_misfit_status(p, rq);
+	//ktime_get_real_ts64(&end);
+	//if (do_report_timing % 100000 == 0) {
+	//	struct timespec64 diff = timespec64_sub(end, start);
+	////	struct timespec64 diff11 = timespec64_sub(step11, step1);
+	////	struct timespec64 diff15 = timespec64_sub(step15, step11);
+	////	struct timespec64 diff2 = timespec64_sub(step2, step15);
+	////	struct timespec64 diff3 = timespec64_sub(end, step2);
+	//	s64 ns_diff = timespec64_to_ns(&diff);
+	////	s64 ns_diff11 = timespec64_to_ns(&diff11);
+	////	s64 ns_diff15 = timespec64_to_ns(&diff15);
+	////	s64 ns_diff2 = timespec64_to_ns(&diff2);
+	////	s64 ns_diff3 = timespec64_to_ns(&diff3);
+	//	printk(KERN_INFO "pick_next %d\n", ns_diff);
+	////	printk(KERN_INFO "pick_next %d %d %d %d %d\n", ns_diff1, ns_diff11, ns_diff15, ns_diff2, ns_diff3);
+	//////	report_timing += 1;
+      	////////do_report_timing = false;
+	//}
 
 	return p;
 

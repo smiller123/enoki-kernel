@@ -1709,6 +1709,9 @@ static inline void enqueue_task_fake(struct rq *rq, struct task_struct *p, int f
 
 static inline void dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 {
+	//struct timespec64 start;
+	//struct timespec64 end;
+	//ktime_get_real_ts64(&start);
 	if (!(flags & DEQUEUE_NOCLOCK))
 		update_rq_clock(rq);
 
@@ -1719,6 +1722,12 @@ static inline void dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 
 	uclamp_rq_dec(rq, p);
 	p->sched_class->dequeue_task(rq, p, flags);
+	//if (do_report_timing % 10000 == 0) {
+	//	ktime_get_real_ts64(&end);
+	//	struct timespec64 diff = timespec64_sub(end, start);
+	//	s64 ns_diff = timespec64_to_ns(&diff);
+	//	printk(KERN_INFO "dequeue diff %d\n", ns_diff);
+	//}
 }
 
 void activate_task(struct rq *rq, struct task_struct *p, int flags)
@@ -4046,6 +4055,9 @@ void wake_up_new_task(struct task_struct *p)
 {
 	struct rq_flags rf;
 	struct rq *rq;
+	//struct timespec64 start;
+	//struct timespec64 end;
+	//ktime_get_real_ts64(&start);
 
 	raw_spin_lock_irqsave(&p->pi_lock, rf.flags);
 	p->state = TASK_RUNNING;
@@ -4081,6 +4093,12 @@ void wake_up_new_task(struct task_struct *p)
 	}
 #endif
 	task_rq_unlock(rq, p, &rf);
+	//if (do_report_timing % 10000 == 0) {
+	//	ktime_get_real_ts64(&end);
+	//	struct timespec64 diff = timespec64_sub(end, start);
+	//	s64 ns_diff = timespec64_to_ns(&diff);
+	//	printk(KERN_INFO "wakeup diff %d\n", ns_diff);
+	//}
 }
 
 #ifdef CONFIG_PREEMPT_NOTIFIERS
@@ -4754,7 +4772,7 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	//printk(KERN_INFO "context_switch end next %p\n", next);
 	//printk(KERN_INFO "context_switch end rf %p\n", rf);
 	//}
-	//if (report_timing % 10000 == 0) {
+	//if (do_report_timing % 10000 == 0) {
 	//	ktime_get_real_ts64(&end);
 	//	struct timespec64 diff = timespec64_sub(end, start);
 	//	struct timespec64 diff1 = timespec64_sub(step1, start);
@@ -4770,7 +4788,7 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	//	s64 ns_diff4 = timespec64_to_ns(&diff4);
 	//	s64 ns_diff5 = timespec64_to_ns(&diff5);
 	//	s64 ns_diff6 = timespec64_to_ns(&diff6);
-	//	//printk(KERN_INFO "context_switch diff %d, %d %d %d %d %d %d\n", ns_diff, ns_diff1, ns_diff2, ns_diff3, ns_diff4, ns_diff5, ns_diff6);
+	//	printk(KERN_INFO "context_switch diff %d, %d %d %d %d %d %d\n", ns_diff, ns_diff1, ns_diff2, ns_diff3, ns_diff4, ns_diff5, ns_diff6);
 	//      //do_report_timing = false;
 	//}
 	//report_timing += 1;
@@ -5332,6 +5350,8 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 {
 	const struct sched_class *class;
 	struct task_struct *p;
+	//struct timespec64 start, end, step1, step2;
+	//ktime_get_real_ts64(&start);
 	//if (prev->policy == SCHED_GHOST) {
 	//	printk("Last was ghost, pick next task");
 	//}
@@ -5406,6 +5426,22 @@ out_return:
 	//if (WARN_ON_ONCE(p == prev && rq->ghost.check_prev_preemption))
 	//	rq->ghost.check_prev_preemption = false;
 #endif
+	//ktime_get_real_ts64(&end);
+	//if (do_report_timing % 10000 == 0) {
+	//	struct timespec64 diff1 = timespec64_sub(step1, start);
+	//	struct timespec64 diff2 = timespec64_sub(step2, step1);
+	//	struct timespec64 diff3 = timespec64_sub(end, step2);
+	//	s64 ns_diff1 = timespec64_to_ns(&diff1);
+	//	s64 ns_diff2 = timespec64_to_ns(&diff2);
+	//	s64 ns_diff3 = timespec64_to_ns(&diff3);
+	//	if (p->policy == SCHED_GHOST) {
+	//		printk(KERN_INFO "ghost pnt diff %d %d %d\n", ns_diff1, ns_diff2, ns_diff3);
+	//	} else {
+	//		printk(KERN_INFO "pnt diff %d %d %d\n", ns_diff1, ns_diff2, ns_diff3);
+	//	}
+	////	report_timing += 1;
+      	//////do_report_timing = false;
+	//}
 
 	return p;
 }
@@ -5541,10 +5577,28 @@ static void __sched notrace __schedule(bool preempt)
 
 	next = pick_next_task(rq, prev, &rf);
 	//if (next->policy != SCHED_GHOST || cpu_of(rq) != 1) {
+	//struct timespec64 step15;
+	//ktime_get_real_ts64(&step15);
 	clear_tsk_need_resched(prev);
 	clear_preempt_need_resched();
 	//struct timespec64 step2;
 	//ktime_get_real_ts64(&step2);
+	//if (do_report_timing % 10000 == 0) {
+	//	ktime_get_real_ts64(&end);
+	//	struct timespec64 diff1 = timespec64_sub(step1, start);
+	//	struct timespec64 diff15 = timespec64_sub(step15, step1);
+	//	struct timespec64 diff2 = timespec64_sub(step2, step15);
+	//	s64 ns_diff1 = timespec64_to_ns(&diff1);
+	//	s64 ns_diff15 = timespec64_to_ns(&diff15);
+	//	s64 ns_diff2 = timespec64_to_ns(&diff2);
+	//	if (next->policy == SCHED_GHOST) {
+	//		printk(KERN_INFO "ghost early diff %d %d %d\n", ns_diff1, ns_diff15, ns_diff2);
+	//	} else {
+	//		printk(KERN_INFO "early diff %d %d %d\n", ns_diff1, ns_diff15, ns_diff2);
+	//	}
+	////	report_timing += 1;
+      	//////do_report_timing = false;
+	//}
 	//struct timespec64 step3;
 	//struct timespec64 step4;
 
@@ -5580,13 +5634,13 @@ static void __sched notrace __schedule(bool preempt)
 			trace_sched_switch(preempt, prev, next);
 
 		/* Also unlocks the rq: */
-	//	ktime_get_real_ts64(&step3);
+		//ktime_get_real_ts64(&step3);
 		//if (next->policy != SCHED_GHOST || cpu_of(rq) != 1) {
 			rq = context_switch(rq, prev, next, &rf);
 		//}
-	//	ktime_get_real_ts64(&step4);
+		//ktime_get_real_ts64(&step4);
 	} else {
-		//if (do_report_timing > 0) {
+		//if (do_report_timing > 0 && next->policy == SCHED_GHOST) {
 		//	printk(KERN_INFO "not switching\n");
 		//}
 		rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
@@ -5599,7 +5653,7 @@ static void __sched notrace __schedule(bool preempt)
 	//		printk(KERN_INFO "didn't context switch");
 	//	}
 	schedule_callback(rq);
-	//if (report_timing % 10000 == 0) {
+	//if (do_report_timing % 10000 == 0) {
 	//	ktime_get_real_ts64(&end);
 	//	struct timespec64 diff = timespec64_sub(end, start);
 	//	struct timespec64 diff1 = timespec64_sub(step1, start);
@@ -5615,9 +5669,9 @@ static void __sched notrace __schedule(bool preempt)
 	//	s64 ns_diff5 = timespec64_to_ns(&diff5);
 	//	printk(KERN_INFO "diff %d, %d %d %d %d %d \n", ns_diff, ns_diff1, ns_diff2, ns_diff3, ns_diff4, ns_diff5);
 	////	report_timing += 1;
-      	////do_report_timing = false;
+      	//////do_report_timing = false;
 	//}
-	//report_timing += 1;
+	do_report_timing += 1;
 }
 
 void __noreturn do_task_dead(void)

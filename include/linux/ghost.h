@@ -33,6 +33,8 @@ struct ghost_agent_type {
 	void (*process_message) (const void* agent,
 			int type, int msglen, uint32_t barrier,
 			void *payload, int payload_size, int *retval);
+	void (*pick_next_task) (const void* agent,
+			int cpu, int *retval);
 	struct module *owner;
 	rwlock_t agent_lock;
 	struct ghost_agent_type * next;

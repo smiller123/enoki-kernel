@@ -279,6 +279,7 @@ enum {
 	MSG_TASK_LATCHED,
 	MSG_TASK_SELECT_RQ,
 	MSG_TASK_MIGRATE_RQ,
+	MSG_TASK_PRIO_CHANGED,
 
 	/* cpu messages */
 	MSG_CPU_TICK		= _MSG_CPU_FIRST,
@@ -304,6 +305,7 @@ struct ghost_msg_payload_task_new {
 	uint64_t pid;
 	uint64_t runtime;	/* cumulative runtime in ns */
 	uint16_t runnable;
+	int prio;
 	struct ghost_sw_info sw_info;
 };
 
@@ -350,6 +352,7 @@ struct ghost_msg_payload_task_departed {
 
 struct ghost_msg_payload_task_affinity_changed {
 	uint64_t pid;
+	uint64_t cpumask;
 };
 
 struct ghost_msg_payload_task_wakeup {
@@ -425,6 +428,11 @@ struct ghost_msg_payload_balance {
 	uint64_t move_pid;
 };
 
+struct ghost_msg_payload_task_prio_changed {
+	uint64_t pid;
+	int prio;
+};
+
 struct ghost_msg_payload_rereg_prep {
 	void *data;
 };
@@ -476,6 +484,7 @@ struct bpf_ghost_msg {
 		struct ghost_msg_payload_select_task_rq select;
 		struct ghost_msg_payload_migrate_task_rq migrate;
 		struct ghost_msg_payload_balance	balance;
+		struct ghost_msg_payload_task_prio_changed	prio_changed;
 		struct ghost_msg_payload_rereg_prep	rereg_prep;
 		struct ghost_msg_payload_rereg_init	rereg_init;
 		struct ghost_msg_payload_msg_size	msg_size;

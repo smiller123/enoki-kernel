@@ -72,13 +72,17 @@ unsigned long sysctl_ghost_cfs_load_added = 1024;
 
 static void _ghost_task_new(struct rq *rq, struct task_struct *p,
 			    bool runnable);
+//void ghost_task_new_agent_type(struct ghost_agent_type *agent, struct task_struct *p);
+//static void _ghost_task_new_agent_type(struct ghost_agent_type *agent, struct task_struct *p, bool runnable);
 static void ghost_task_yield(struct rq *rq, struct task_struct *p);
 static void ghost_task_blocked(struct rq *rq, struct task_struct *p);
 static void task_dead_ghost(struct task_struct *p);
 static void task_deliver_msg_task_new(struct rq *rq, struct task_struct *p,
 				      bool runnable);
+static void task_deliver_msg_task_prio_changed(struct rq *rq, struct task_struct *p);
 static void task_deliver_msg_affinity_changed(struct rq *rq,
-					      struct task_struct *p);
+					      struct task_struct *p,
+					      struct cpumask *mask);
 static void task_deliver_msg_departed(struct rq *rq, struct task_struct *p);
 static void task_deliver_msg_wakeup(struct rq *rq, struct task_struct *p);
 static void task_deliver_msg_latched(struct rq *rq, struct task_struct *p,
@@ -244,6 +248,7 @@ int register_ghost_agent(const void *agent,
 	agent_type->msg_size = 0;
 	agent_type->agent = agent;
 	agent_type->process_message = process_message;
+	//agent_type->pick_next_task = pnt_func;
 	agent_type->owner = (struct module *) 0;
 	rwlock_init(&agent_type->agent_lock);
 	agent_type->next = (struct ghost_agent_type *) 0;
@@ -808,6 +813,7 @@ static void prio_changed_ghost(struct rq *rq, struct task_struct *p, int old)
 	 * XXX produce MSG_TASK_PRIO_CHANGE into p->ghost.dst_q.
 	 */
 	//ghost_wake_agent_of(p);
+	task_deliver_msg_task_prio_changed(rq, p);
 
 	/*
 	 * Note that if a running task changes priority then
@@ -848,6 +854,7 @@ static void switched_to_ghost(struct rq *rq, struct task_struct *p)
 		 */
 		//VM_BUG_ON(p->ghost.new_task);
 		p->ghost.new_task = true;  /* see ghost_prepare_task_switch() */
+		//ghost_task_new(rq, p);
 	}
 }
 
@@ -969,7 +976,7 @@ enqueue_task_ghost(struct rq *rq, struct task_struct *p, int flags)
 	//printk(KERN_INFO "enqueuing running %d\n", rq->ghost.ghost_nr_running);
 	add_nr_running(rq, 1);
 	rq->ghost.ghost_nr_running++;
-	//printk(KERN_INFO "enqueue_task_ghost %d, running %d\n", p->pid, rq->ghost.ghost_nr_running);
+//	printk(KERN_INFO "enqueue_task_ghost %d, running %d\n", p->pid, rq->ghost.ghost_nr_running);
 
 	//WARN_ON_ONCE(on_ghost_rq(rq, p));
 	//list_add_tail(&p->ghost.run_list, &rq->ghost.tasks);
@@ -1332,7 +1339,7 @@ bool ghost_produce_prev_msgs(struct rq *rq, struct task_struct *prev)
 		//printk(KERN_INFO "producing messages yield task");
 		WARN_ON_ONCE(prev->ghost.blocked_task);
 		prev->ghost.yield_task = false;
-		ghost_task_yield(rq, prev);
+		//ghost_task_yield(rq, prev);
 		//ghost_wake_agent_of(prev);
 		return false;
 	}
@@ -1478,6 +1485,13 @@ static struct task_struct *pick_next_task_ghost(struct rq *rq)
 	struct task_struct *next = NULL;
 	int pid_ret;
 	struct ghost_agent_type *p;
+	//struct timespec64 start;
+	//struct timespec64 step1;
+	//struct timespec64 step11;
+	//struct timespec64 step15;
+	//struct timespec64 step2;
+	//struct timespec64 end;
+	//ktime_get_real_ts64(&start);
 
 	/*
 	 * We made it to ghost's pick_next_task so no need to check whether
@@ -1574,9 +1588,12 @@ static struct task_struct *pick_next_task_ghost(struct rq *rq)
 	//}
 
 	//rcu_read_lock();
+	//ktime_get_real_ts64(&step1);
 	// TODO: call into our code to pick next task
 	for (p = ghost_agents; p; p = p->next) {
+	//	ktime_get_real_ts64(&step11);
 		pid_ret = cpu_deliver_msg_pnt(rq, p);
+	//	ktime_get_real_ts64(&step15);
 		if (pid_ret > 0) {
 			//printk(KERN_INFO "got %d from pnt, cpu %d\n", pid_ret, rq->cpu);
 			next = find_task_by_pid_ns(pid_ret, &init_pid_ns);
@@ -1599,6 +1616,7 @@ static struct task_struct *pick_next_task_ghost(struct rq *rq)
 			//	return NULL;
 			//}
 			//rcu_read_unlock();
+	//		ktime_get_real_ts64(&step2);
 			goto done;
 		}
 	}
@@ -1640,17 +1658,33 @@ done:
 	//	rq->ghost.blocked_in_run = false;
 	//	return pick_next_ghost_agent(rq);
 	//}
-	if (cpu_of(rq) == 1 && prev && next) {
-		if (next->policy == SCHED_GHOST) {
-		//	printk(KERN_INFO "got sched ghost\n");
-		}
-		//printk(KERN_INFO "returning pid %d\n", next->pid);
-		//psi_print_stats(prev, next);
-		//return NULL;
-	}
+	//if (cpu_of(rq) == 1 && prev && next) {
+	//	if (next->policy == SCHED_GHOST) {
+	//	//	printk(KERN_INFO "got sched ghost\n");
+	//	}
+	//	//printk(KERN_INFO "returning pid %d\n", next->pid);
+	//	//psi_print_stats(prev, next);
+	//	//return NULL;
+	//}
 
 	ghost_prepare_switch(rq, prev, next);
 	rq->ghost.must_resched = false;
+	//ktime_get_real_ts64(&end);
+	//if (do_report_timing % 10000 == 0) {
+	//	struct timespec64 diff1 = timespec64_sub(step1, start);
+	//	struct timespec64 diff11 = timespec64_sub(step11, step1);
+	//	struct timespec64 diff15 = timespec64_sub(step15, step11);
+	//	struct timespec64 diff2 = timespec64_sub(step2, step15);
+	//	struct timespec64 diff3 = timespec64_sub(end, step2);
+	//	s64 ns_diff1 = timespec64_to_ns(&diff1);
+	//	s64 ns_diff11 = timespec64_to_ns(&diff11);
+	//	s64 ns_diff15 = timespec64_to_ns(&diff15);
+	//	s64 ns_diff2 = timespec64_to_ns(&diff2);
+	//	s64 ns_diff3 = timespec64_to_ns(&diff3);
+	//	printk(KERN_INFO "pick_next %d %d %d %d %d\n", ns_diff1, ns_diff11, ns_diff15, ns_diff2, ns_diff3);
+	////	report_timing += 1;
+      	//////do_report_timing = false;
+	//}
 
 	return next;
 }
@@ -1722,6 +1756,7 @@ static void yield_task_ghost(struct rq *rq)
 	 */
 	WARN_ON_ONCE(curr->ghost.yield_task);
 	curr->ghost.yield_task = true;
+	ghost_task_yield(rq, curr);
 }
 
 static void set_cpus_allowed_ghost(struct task_struct *p,
@@ -1754,7 +1789,7 @@ static void set_cpus_allowed_ghost(struct task_struct *p,
 	 * Task msg delivery handles this properly but be careful when
 	 * accessing 'p->ghost' directly in this function.
 	 */
-	task_deliver_msg_affinity_changed(rq, p);
+	task_deliver_msg_affinity_changed(rq, p, newmask);
 
 	if (locked)
 		__task_rq_unlock(rq, &rf);
@@ -1765,6 +1800,8 @@ static void set_cpus_allowed_ghost(struct task_struct *p,
 static void task_woken_ghost(struct rq *rq, struct task_struct *p)
 {
 	//struct ghost_status_word *sw = p->ghost.status_word;
+	//struct timespec64 start, end;
+	//ktime_get_real_ts64(&start);
 
 	WARN_ON_ONCE(!task_on_rq_queued(p));
 
@@ -1784,6 +1821,12 @@ static void task_woken_ghost(struct rq *rq, struct task_struct *p)
 	}
 	task_deliver_msg_wakeup(rq, p);
 	//ghost_wake_agent_of(p);
+	//ktime_get_real_ts64(&end);
+	//if (do_report_timing % 10000 == 0) {
+	//	struct timespec64 diff = timespec64_sub(end, start);
+	//	s64 ns_diff = timespec64_to_ns(&diff);
+	//	printk(KERN_INFO "woken %d\n", ns_diff);
+	//}
 }
 
 DEFINE_SCHED_CLASS(ghost) = {
@@ -2839,6 +2882,9 @@ static int __ghost_prep_task(struct task_struct *p,
 	//p->ghost.status_word = sw;
 	p->ghost.new_task = forked;
 	p->ghost.agent_type = agent_type;
+	//if (forked) {
+	//	ghost_task_new_agent_type(agent_type, p);
+	//}
 
 	//if (!forked) {
 		//ghost_initialize_status_word(p);
@@ -2928,6 +2974,7 @@ static void ghost_uninhibit_task_msgs(struct task_struct *p)
 				WARN_ON_ONCE(!task_running(rq, p));
 			} else {
 				const bool runnable = task_on_rq_queued(p);
+				printk(KERN_INFO "task new in weird spot");
 				task_deliver_msg_task_new(rq, p, runnable);
 				//ghost_wake_agent_of(p);
 			}
@@ -4220,77 +4267,77 @@ int ekiben_send_hint(int policy,
 	return 0;
 }
 
-static struct task_struct *find_task_by_gtid(gtid_t gtid)
-{
-	struct task_struct *p;
-	pid_t pid = gtid >> GHOST_TID_SEQNUM_BITS;
-
-	RCU_LOCKDEP_WARN(!rcu_read_lock_held(),
-			 "find_task_by_gtid() needs rcu_read_lock protection");
-
-	if (gtid < 0)
-		return NULL;
-
-	if (gtid == 0)
-		return current;
-
-	p = find_task_by_pid_ns(pid, &init_pid_ns);
-
-	/*
-	 * It is possible for a task to schedule after losing its identity
-	 * during exit (do_exit -> unhash_process -> detach_pid -> free_pid).
-	 *
-	 * Since the agent identifies tasks to schedule using a 'gtid' we
-	 * must provide an alternate lookup path so the dying task can be
-	 * scheduled and properly die.
-	 */
-	//if (unlikely(!p)) {
-	//	ulong flags;
-	//	struct task_struct *t;
-	//	//struct ghost_enclave *e;
-
-	//	//e = rcu_dereference(per_cpu(enclave, smp_processor_id()));
-	//	//if (WARN_ON_ONCE(!e))
-	//	//	return NULL;
-
-	//	//spin_lock_irqsave(&e->lock, flags);
-	//	//list_for_each_entry(t, &e->task_list, ghost.task_list) {
-	//	//	if (t->gtid == gtid) {
-	//	//		p = t;
-	//	//		break;
-	//	//	}
-	//	//}
-	//	//spin_unlock_irqrestore(&e->lock, flags);
-	//}
-	if (!p)
-		return NULL;
-
-	/* Make sure this really is the process we are looking for. */
-	if (p->gtid != gtid)
-		return NULL;
-
-	/*
-	 * We rely on rcu to guarantee stability of 'p':
-	 *
-	 * If 'p' was obtained via find_task_by_pid_ns() then release_task()
-	 * waits for an rcu grace period via call_rcu(delayed_put_task_struct).
-	 * This includes the case where userspace moves a task out of ghost
-	 * via sched_setscheduler(2).
-	 *
-	 * If 'p' was obtained via enclave->task_list then we need to account
-	 * for the task dying or moving out of the ghost sched_class when its
-	 * enclave is destroyed.
-	 *
-	 * A dying task ensures that the task_struct will remain stable for
-	 * an rcu grace period via call_rcu(ghost_delayed_put_task_struct).
-	 *
-	 * A dying enclave will synchronize_rcu() in ghost_destroy_enclave()
-	 * before moving its tasks out of ghost (we don't use call_rcu() here
-	 * because the task may transition in and out of ghost any number of
-	 * times independent of call_rcu() invocation).
-	 */
-	return p;
-}
+//static struct task_struct *find_task_by_gtid(gtid_t gtid)
+//{
+//	struct task_struct *p;
+//	pid_t pid = gtid >> GHOST_TID_SEQNUM_BITS;
+//
+//	RCU_LOCKDEP_WARN(!rcu_read_lock_held(),
+//			 "find_task_by_gtid() needs rcu_read_lock protection");
+//
+//	if (gtid < 0)
+//		return NULL;
+//
+//	if (gtid == 0)
+//		return current;
+//
+//	p = find_task_by_pid_ns(pid, &init_pid_ns);
+//
+//	/*
+//	 * It is possible for a task to schedule after losing its identity
+//	 * during exit (do_exit -> unhash_process -> detach_pid -> free_pid).
+//	 *
+//	 * Since the agent identifies tasks to schedule using a 'gtid' we
+//	 * must provide an alternate lookup path so the dying task can be
+//	 * scheduled and properly die.
+//	 */
+//	//if (unlikely(!p)) {
+//	//	ulong flags;
+//	//	struct task_struct *t;
+//	//	//struct ghost_enclave *e;
+//
+//	//	//e = rcu_dereference(per_cpu(enclave, smp_processor_id()));
+//	//	//if (WARN_ON_ONCE(!e))
+//	//	//	return NULL;
+//
+//	//	//spin_lock_irqsave(&e->lock, flags);
+//	//	//list_for_each_entry(t, &e->task_list, ghost.task_list) {
+//	//	//	if (t->gtid == gtid) {
+//	//	//		p = t;
+//	//	//		break;
+//	//	//	}
+//	//	//}
+//	//	//spin_unlock_irqrestore(&e->lock, flags);
+//	//}
+//	if (!p)
+//		return NULL;
+//
+//	/* Make sure this really is the process we are looking for. */
+//	if (p->gtid != gtid)
+//		return NULL;
+//
+//	/*
+//	 * We rely on rcu to guarantee stability of 'p':
+//	 *
+//	 * If 'p' was obtained via find_task_by_pid_ns() then release_task()
+//	 * waits for an rcu grace period via call_rcu(delayed_put_task_struct).
+//	 * This includes the case where userspace moves a task out of ghost
+//	 * via sched_setscheduler(2).
+//	 *
+//	 * If 'p' was obtained via enclave->task_list then we need to account
+//	 * for the task dying or moving out of the ghost sched_class when its
+//	 * enclave is destroyed.
+//	 *
+//	 * A dying task ensures that the task_struct will remain stable for
+//	 * an rcu grace period via call_rcu(ghost_delayed_put_task_struct).
+//	 *
+//	 * A dying enclave will synchronize_rcu() in ghost_destroy_enclave()
+//	 * before moving its tasks out of ghost (we don't use call_rcu() here
+//	 * because the task may transition in and out of ghost any number of
+//	 * times independent of call_rcu() invocation).
+//	 */
+//	return p;
+//}
 
 //static int _get_sw_info(struct ghost_enclave *e,
 //			 const struct ghost_status_word *sw,
@@ -4720,27 +4767,27 @@ static struct task_struct *find_task_by_gtid(gtid_t gtid)
 //	return ret;
 //}
 
-int ghost_get_cpu_time(struct ghost_ioc_get_cpu_time __user *arg)
-{
-	struct task_struct *p;
-	u64 time;
-	gtid_t gtid;
-
-	if (copy_from_user(&gtid, &arg->gtid, sizeof(gtid_t)))
-		return -EFAULT;
-
-	rcu_read_lock();
-	p = find_task_by_gtid(gtid);
-	if (!p) {
-		rcu_read_unlock();
-		return -ESRCH;
-	}
-	time = task_sched_runtime(p);
-	rcu_read_unlock();
-	if (copy_to_user(&arg->runtime, &time, sizeof(u64)))
-		return -EFAULT;
-	return 0;
-}
+//int ghost_get_cpu_time(struct ghost_ioc_get_cpu_time __user *arg)
+//{
+//	struct task_struct *p;
+//	u64 time;
+//	gtid_t gtid;
+//
+//	if (copy_from_user(&gtid, &arg->gtid, sizeof(gtid_t)))
+//		return -EFAULT;
+//
+//	rcu_read_lock();
+//	p = find_task_by_gtid(gtid);
+//	if (!p) {
+//		rcu_read_unlock();
+//		return -ESRCH;
+//	}
+//	time = task_sched_runtime(p);
+//	rcu_read_unlock();
+//	if (copy_to_user(&arg->runtime, &time, sizeof(u64)))
+//		return -EFAULT;
+//	return 0;
+//}
 
 /*
  * 'ring_avail_slots' returns the available slots in the ring.
@@ -4812,15 +4859,20 @@ static int _produce(uint32_t barrier, int type,
 	ulong flags;
 	int msglen;
 	int ret;
+	//struct timespec64 start;
+	//struct timespec64 end;
+	//struct timespec64 step1;
+	//struct timespec64 step2;
+	//ktime_get_real_ts64(&start);
 
 	//const int nelems = q->nelems;
-	const int slot_size = sizeof(struct ghost_msg);
+	//const int slot_size = sizeof(struct ghost_msg);
 
-	BUILD_BUG_ON_NOT_POWER_OF_2(slot_size);
+	//BUILD_BUG_ON_NOT_POWER_OF_2(slot_size);
 
 	msglen = sizeof(struct ghost_msg) + payload_size;
-	if (WARN_ON_ONCE(msglen > USHRT_MAX))
-		return -EINVAL;
+	//if (WARN_ON_ONCE(msglen > USHRT_MAX))
+	//	return -EINVAL;
 	//printk(KERN_INFO "sending a message");
 	//slots_needed = ALIGN(msglen, slot_size) / slot_size;
 
@@ -4850,22 +4902,36 @@ static int _produce(uint32_t barrier, int type,
 	//	hidx = 0;
 	//	slots_skipped = avail.ahead;
 	//}
-	rcu_read_lock();
+	//rcu_read_lock();
 	ret = 0;
 	if (agent_type && agent_type->process_message) {
 		if (lock) {
 			read_lock(&agent_type->agent_lock);
 		}
 		//printk(KERN_INFO "calling message send");
+		//ktime_get_real_ts64(&step1);
+	//	if (do_report_timing % 10000 == 0) {
+	//		struct timespec64 diff1 = timespec64_sub(step1, start);
+	//		struct timespec64 diff2 = timespec64_sub(step2, step1);
+	//		struct timespec64 diff3 = timespec64_sub(step3, step2);
+	//		struct timespec64 diff4 = timespec64_sub(end, step3);
+	//		s64 ns_diff1 = timespec64_to_ns(&diff1);
+	//		s64 ns_diff2 = timespec64_to_ns(&diff2);
+	//		s64 ns_diff3 = timespec64_to_ns(&diff3);
+	//		s64 ns_diff4 = timespec64_to_ns(&diff4);
+	//		printk(KERN_INFO "pick_next call %d, %d, %d, %d\n", ns_diff1, ns_diff2, ns_diff3, ns_diff4);
+	//		printk(KERN_INFO "calling message %d\n", type);
+	//	}
 		agent_type->process_message(agent_type->agent,
 				type, msglen, barrier,
 				payload, payload_size, &ret);
+		//ktime_get_real_ts64(&step2);
 		//printk(KERN_INFO "got ret %d\n", ret);
 		if (lock) {
 			read_unlock(&agent_type->agent_lock);
 		}
 	}
-	rcu_read_unlock();
+	//rcu_read_unlock();
 
 	//ring->msgs[hidx].type = type;
 	//ring->msgs[hidx].length = msglen;
@@ -4877,6 +4943,18 @@ static int _produce(uint32_t barrier, int type,
 	//smp_wmb();	/* publish the new message */
 
 	//spin_unlock_irqrestore(&q->lock, flags);
+	//ktime_get_real_ts64(&end);
+	//if (do_report_timing % 10000 == 0) {
+	//	struct timespec64 diff1 = timespec64_sub(step1, start);
+	//	struct timespec64 diff2 = timespec64_sub(step2, step1);
+	//	struct timespec64 diff3 = timespec64_sub(end, step2);
+	//	s64 ns_diff1 = timespec64_to_ns(&diff1);
+	//	s64 ns_diff2 = timespec64_to_ns(&diff2);
+	//	s64 ns_diff3 = timespec64_to_ns(&diff3);
+	//	printk(KERN_INFO "process_message %d %d %d\n", ns_diff1, ns_diff2, ns_diff3);
+	////	report_timing += 1;
+      	//////do_report_timing = false;
+	//}
 
 	return ret;
 }
@@ -5010,6 +5088,10 @@ static inline int __produce_for_task(struct ghost_agent_type *agent_type,
 		payload = &msg->cleanup;
 		payload_size = sizeof(msg->cleanup);
 		break;
+	case MSG_TASK_PRIO_CHANGED:
+		payload = &msg->prio_changed;
+		payload_size = sizeof(msg->prio_changed);
+		break;
 	default:
 		WARN(1, "unknown bpg_ghost_msg type %d!\n", msg->type);
 		return -EINVAL;
@@ -5032,13 +5114,16 @@ static inline int produce_for_task(struct task_struct *p,
 
 static void migrate_task_rq_ghost(struct task_struct *p, int new_cpu) {
 	struct rq *rq = task_rq(p);
-	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
-	struct ghost_msg_payload_migrate_task_rq *payload = &msg->migrate;
+	struct bpf_ghost_msg msg;
+	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct ghost_msg_payload_migrate_task_rq *payload = &msg.migrate;
+	memset(&msg, 0, sizeof(msg));
 
-	msg->type = MSG_TASK_MIGRATE_RQ;
+	msg.type = MSG_TASK_MIGRATE_RQ;
 	payload->pid = p->pid;
 	payload->new_cpu = new_cpu;
-	produce_for_task(p, msg);
+	produce_for_task(p, &msg);
+	p->ghost.twi.wake_up_cpu = new_cpu;
 }
 
 static int select_task_rq_ghost(struct task_struct *p, int cpu, int wake_flags)
@@ -5047,8 +5132,12 @@ static int select_task_rq_ghost(struct task_struct *p, int cpu, int wake_flags)
 	int waker_cpu = smp_processor_id();
 	int new_cpu;
 	struct rq *rq = task_rq(p);
-	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
-	struct ghost_msg_payload_select_task_rq *payload = &msg->select;
+	struct bpf_ghost_msg msg;
+	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct ghost_msg_payload_select_task_rq *payload = &msg.select;
+	//struct timespec64 start, end;
+	memset(&msg, 0, sizeof(msg));
+	//ktime_get_real_ts64(&start);
 
 	/* For anything but wake ups, just return the task_cpu */
 	if (!(wake_flags & (WF_TTWU | WF_FORK)))
@@ -5078,9 +5167,9 @@ static int select_task_rq_ghost(struct task_struct *p, int cpu, int wake_flags)
 	//if (READ_ONCE(p->ghost.enclave->wake_on_waker_cpu))
 	//	p->ghost.twi.wake_up_cpu = waker_cpu;
 	//else
-	msg->type = MSG_TASK_SELECT_RQ;
+	msg.type = MSG_TASK_SELECT_RQ;
 	payload->pid = p->pid;
-	produce_for_task(p, msg);
+	produce_for_task(p, &msg);
 	new_cpu = payload->ret_cpu;
 	//task_rq_unlock(rq, p, &rf);
 	p->ghost.twi.wake_up_cpu = new_cpu;
@@ -5090,6 +5179,12 @@ static int select_task_rq_ghost(struct task_struct *p, int cpu, int wake_flags)
 	//if new_cpu != task_cpu(p) {
 	//printk(KERN_INFO "selected cpu %d, from %d\n", new_cpu, task_cpu(p));
 	//}
+	//ktime_get_real_ts64(&end);
+	//if (do_report_timing % 10000 == 0) {
+	//	struct timespec64 diff = timespec64_sub(end, start);
+	//	s64 ns_diff = timespec64_to_ns(&diff);
+	//	printk(KERN_INFO "select rq %d\n", ns_diff);
+	//}
 
 	return p->ghost.twi.wake_up_cpu;
 }
@@ -5098,21 +5193,34 @@ static int balance_ghost(struct rq *rq, struct task_struct *prev,
 			 struct rq_flags *rf)
 {
 
-	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
-	struct ghost_msg_payload_balance *payload = &msg->balance;
+	struct bpf_ghost_msg msg;
+	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct ghost_msg_payload_balance *payload = &msg.balance;
 	uint64_t move_pid;
+	//struct timespec64 start;
+	//struct timespec64 end;
+	//ktime_get_real_ts64(&start);
+	memset(&msg, 0, sizeof(msg));
 
-	msg->type = MSG_BALANCE;
+	msg.type = MSG_BALANCE;
 	payload->cpu = cpu_of(rq);
 	//payload->gtid = gtid(p);
 	rq_unpin_lock(rq, rf);
 
-	produce_for_task(prev, msg);
+	produce_for_task(prev, &msg);
 	if (payload->do_move) {
 		move_pid = payload->move_pid;
 		ghost_run_pid_on(move_pid, 0, cpu_of(rq));
 	}
 	rq_repin_lock(rq, rf);
+	//ktime_get_real_ts64(&end);
+	//if (do_report_timing % 10000 == 0) {
+	//	struct timespec64 diff = timespec64_sub(end, start);
+	//	s64 ns_diff = timespec64_to_ns(&diff);
+	//	printk(KERN_INFO "balance %d\n", ns_diff);
+	//////	report_timing += 1;
+      	////////do_report_timing = false;
+	//}
 	//struct task_struct *agent = rq->ghost.agent;
 
 	//if (!agent || !agent->on_rq)
@@ -5206,8 +5314,10 @@ static inline bool cpu_skip_message(struct rq *rq)
 static inline bool cpu_deliver_msg_tick(struct rq *rq, struct task_struct *p,
 		int queued)
 {
-	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
-	struct ghost_msg_payload_cpu_tick *payload = &msg->cpu_tick;
+	struct bpf_ghost_msg msg;
+	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct ghost_msg_payload_cpu_tick *payload = &msg.cpu_tick;
+	memset(&msg, 0, sizeof(msg));
 	//struct ghost_enclave *e;
 
 	if (cpu_skip_message(rq))
@@ -5221,11 +5331,11 @@ static inline bool cpu_deliver_msg_tick(struct rq *rq, struct task_struct *p,
 	//}
 	//rcu_read_unlock();
 
-	msg->type = MSG_CPU_TICK;
+	msg.type = MSG_CPU_TICK;
 	payload->cpu = cpu_of(rq);
 	payload->queued = queued;
 
-	return !produce_for_task(p, msg);
+	return !produce_for_task(p, &msg);
 }
 
 /* Returns true if MSG_CPU_TIMER_EXPIRED was produced and false otherwise */
@@ -5248,18 +5358,20 @@ static inline bool cpu_deliver_msg_tick(struct rq *rq, struct task_struct *p,
 static bool cpu_deliver_msg_not_idle(struct rq *rq, struct task_struct *next,
 		struct task_struct *prev)
 {
-	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
-	struct ghost_msg_payload_cpu_not_idle *payload = &msg->cpu_not_idle;
+	struct bpf_ghost_msg msg;
+	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct ghost_msg_payload_cpu_not_idle *payload = &msg.cpu_not_idle;
+	memset(&msg, 0, sizeof(msg));
 
 	if (cpu_skip_message(rq))
 		return false;
 
-	msg->type = MSG_CPU_NOT_IDLE;
+	msg.type = MSG_CPU_NOT_IDLE;
 	payload->cpu = cpu_of(rq);
 	payload->next_pid = next->pid;
 	//payload->next_gtid = gtid(next);
 
-	return !produce_for_task(prev, msg);
+	return !produce_for_task(prev, &msg);
 }
 
 /*
@@ -5353,43 +5465,117 @@ static inline int __task_deliver_common(struct rq *rq, struct task_struct *p)
 static void task_deliver_msg_task_new(struct rq *rq, struct task_struct *p,
 				      bool runnable)
 {
-	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct bpf_ghost_msg msg;
+	memset(&msg, 0, sizeof(msg));
+	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
 	//struct bpf_ghost_msg *msg = kmalloc(sizeof(struct bpf_ghost_msg), GFP_KERNEL);
 	//struct bpf_ghost_msg msg_struct = struct bpf_ghost_msg {
 	//};
 	//struct bpf_ghost_msg msg;
 	//struct ghost_msg_payload_task_new payload;
-	struct ghost_msg_payload_task_new *payload = &msg->newt;
+	struct ghost_msg_payload_task_new *payload = &msg.newt;
 
-	if (__task_deliver_common(rq, p)) {
-		printk(KERN_INFO "not actually delivering\n");
-		return;
-	}
+	//if (__task_deliver_common(rq, p)) {
+	//	printk(KERN_INFO "not actually delivering\n");
+	//	return;
+	//}
 
-	msg->type = MSG_TASK_NEW;
+	msg.type = MSG_TASK_NEW;
 	//payload->gtid = gtid(p);
-	//printk(KERN_INFO "new task pid %d\n", p->pid);
+	//printk(KERN_INFO "new task pid %d prio %d weight %d inv weight %d static prio %d normal prio %d\n", p->pid, p->prio, p->se.load.weight, p->se.load.inv_weight, p->static_prio, p->normal_prio);
 	payload->pid = p->pid;
 	payload->runnable = runnable;
 	payload->runtime = p->se.sum_exec_runtime;
+	payload->prio = p->prio;
 	//if (_get_sw_info(p->ghost.enclave, p->ghost.status_word,
 	//		 &payload->sw_info)) {
 	//	WARN(1, "New task PID %d didn't have a status word!", p->pid);
 	//	return;
 	//}
 
-	produce_for_task(p, msg);
+	produce_for_task(p, &msg);
 }
+
+static void task_deliver_msg_task_prio_changed(struct rq *rq, struct task_struct *p)
+{
+	struct bpf_ghost_msg msg;
+	memset(&msg, 0, sizeof(msg));
+	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	//struct bpf_ghost_msg *msg = kmalloc(sizeof(struct bpf_ghost_msg), GFP_KERNEL);
+	//struct bpf_ghost_msg msg_struct = struct bpf_ghost_msg {
+	//};
+	//struct bpf_ghost_msg msg;
+	//struct ghost_msg_payload_task_new payload;
+	struct ghost_msg_payload_task_prio_changed *payload = &msg.prio_changed;
+
+	//if (__task_deliver_common(rq, p)) {
+	//	printk(KERN_INFO "not actually delivering\n");
+	//	return;
+	//}
+
+	msg.type = MSG_TASK_PRIO_CHANGED;
+	//payload->gtid = gtid(p);
+	//printk(KERN_INFO "new task pid %d\n", p->pid);
+	payload->pid = p->pid;
+	payload->prio = p->prio;
+	//if (_get_sw_info(p->ghost.enclave, p->ghost.status_word,
+	//		 &payload->sw_info)) {
+	//	WARN(1, "New task PID %d didn't have a status word!", p->pid);
+	//	return;
+	//}
+
+	produce_for_task(p, &msg);
+}
+
+//static void task_deliver_msg_task_new_agent(struct ghost_agent_type *agent, struct task_struct *p,
+//				      bool runnable)
+//{
+//	struct bpf_ghost_msg msg;
+//	struct ghost_msg_payload_task_new *payload;
+//	memset(&msg, 0, sizeof(msg));
+//	payload = &msg.newt;
+//
+//
+//	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+//	//struct bpf_ghost_msg *msg = kmalloc(sizeof(struct bpf_ghost_msg), GFP_KERNEL);
+//	//struct bpf_ghost_msg msg_struct = struct bpf_ghost_msg {
+//	//};
+//	//struct bpf_ghost_msg msg;
+//	//struct ghost_msg_payload_task_new payload;
+//	//struct ghost_msg_payload_task_new *payload = &msg->newt;
+//
+//	//if (__task_deliver_common(rq, p)) {
+//	//	printk(KERN_INFO "not actually delivering\n");
+//	//	return;
+//	//}
+//
+//	msg.type = MSG_TASK_NEW;
+//	//payload->gtid = gtid(p);
+//	//printk(KERN_INFO "new task pid %d\n", p->pid);
+//	payload->pid = p->pid;
+//	payload->runnable = runnable;
+//	payload->runtime = p->se.sum_exec_runtime;
+//	//if (_get_sw_info(p->ghost.enclave, p->ghost.status_word,
+//	//		 &payload->sw_info)) {
+//	//	WARN(1, "New task PID %d didn't have a status word!", p->pid);
+//	//	return;
+//	//}
+//	produce_for_agent_type(agent, &msg);
+//
+//	//produce_for_task(p, msg);
+//}
 
 static void task_deliver_msg_yield(struct rq *rq, struct task_struct *p)
 {
-	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
-	struct ghost_msg_payload_task_yield *payload = &msg->yield;
+	struct bpf_ghost_msg msg;
+	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct ghost_msg_payload_task_yield *payload = &msg.yield;
+	memset(&msg, 0, sizeof(msg));
 
 	if (__task_deliver_common(rq, p))
 		return;
 
-	msg->type = MSG_TASK_YIELD;
+	msg.type = MSG_TASK_YIELD;
 	//payload->gtid = gtid(p);
 	payload->pid = p->pid;
 	payload->runtime = p->se.sum_exec_runtime;
@@ -5398,14 +5584,16 @@ static void task_deliver_msg_yield(struct rq *rq, struct task_struct *p)
 	payload->agent_data = 0;
 	payload->from_switchto = ghost_in_switchto(rq);
 
-	produce_for_task(p, msg);
+	produce_for_task(p, &msg);
 }
 
 static void task_deliver_msg_preempt(struct rq *rq, struct task_struct *p,
 				     bool from_switchto, bool was_latched)
 {
-	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
-	struct ghost_msg_payload_task_preempt *payload = &msg->preempt;
+	struct bpf_ghost_msg msg;
+	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct ghost_msg_payload_task_preempt *payload = &msg.preempt;
+	memset(&msg, 0, sizeof(msg));
 
 	if (__task_deliver_common(rq, p))
 		return;
@@ -5424,7 +5612,7 @@ static void task_deliver_msg_preempt(struct rq *rq, struct task_struct *p,
 	 */
 	WARN_ON_ONCE(from_switchto && rq->ghost.switchto_count > 0);
 
-	msg->type = MSG_TASK_PREEMPT;
+	msg.type = MSG_TASK_PREEMPT;
 	//payload->gtid = gtid(p);
 	payload->pid = p->pid;
 	payload->runtime = p->se.sum_exec_runtime;
@@ -5434,18 +5622,20 @@ static void task_deliver_msg_preempt(struct rq *rq, struct task_struct *p,
 	payload->from_switchto = from_switchto;
 	payload->was_latched = was_latched;
 
-	produce_for_task(p, msg);
+	produce_for_task(p, &msg);
 }
 
 static void task_deliver_msg_blocked(struct rq *rq, struct task_struct *p)
 {
-	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
-	struct ghost_msg_payload_task_blocked *payload = &msg->blocked;
+	struct bpf_ghost_msg msg;
+	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct ghost_msg_payload_task_blocked *payload = &msg.blocked;
+	memset(&msg, 0, sizeof(msg));
 
 	if (__task_deliver_common(rq, p))
 		return;
 
-	msg->type = MSG_TASK_BLOCKED;
+	msg.type = MSG_TASK_BLOCKED;
 	//payload->gtid = gtid(p);
 	payload->pid = p->pid;
 	payload->runtime = p->se.sum_exec_runtime;
@@ -5453,32 +5643,36 @@ static void task_deliver_msg_blocked(struct rq *rq, struct task_struct *p)
 	payload->cpu_seqnum = ++rq->ghost.cpu_seqnum;
 	payload->from_switchto = ghost_in_switchto(rq);
 
-	produce_for_task(p, msg);
+	produce_for_task(p, &msg);
 }
 
 static void task_deliver_msg_dead(struct rq *rq, struct task_struct *p)
 {
-	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
-	struct ghost_msg_payload_task_dead *payload = &msg->dead;
+	struct bpf_ghost_msg msg;
+	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct ghost_msg_payload_task_dead *payload = &msg.dead;
+	memset(&msg, 0, sizeof(msg));
 
 	if (__task_deliver_common(rq, p))
 		return;
 
-	msg->type = MSG_TASK_DEAD;
+	msg.type = MSG_TASK_DEAD;
 	//payload->gtid = gtid(p);
 	payload->pid = p->pid;
-	produce_for_task(p, msg);
+	produce_for_task(p, &msg);
 }
 
 static void task_deliver_msg_departed(struct rq *rq, struct task_struct *p)
 {
-	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
-	struct ghost_msg_payload_task_departed *payload = &msg->departed;
+	struct bpf_ghost_msg msg;
+	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct ghost_msg_payload_task_departed *payload = &msg.departed;
+	memset(&msg, 0, sizeof(msg));
 
 	if (__task_deliver_common(rq, p))
 		return;
 
-	msg->type = MSG_TASK_DEPARTED;
+	msg.type = MSG_TASK_DEPARTED;
 	//payload->gtid = gtid(p);
 	payload->pid = p->pid;
 	payload->cpu = cpu_of(rq);
@@ -5489,15 +5683,18 @@ static void task_deliver_msg_departed(struct rq *rq, struct task_struct *p)
 		payload->from_switchto = false;
 	payload->was_current = task_current(rq, p);
 
-	produce_for_task(p, msg);
+	produce_for_task(p, &msg);
 }
 
 static void task_deliver_msg_affinity_changed(struct rq *rq,
-					      struct task_struct *p)
+					      struct task_struct *p,
+					      struct cpumask *mask)
 {
-	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct bpf_ghost_msg msg;
+	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
 	struct ghost_msg_payload_task_affinity_changed *payload =
-		&msg->affinity;
+		&msg.affinity;
+	memset(&msg, 0, sizeof(msg));
 
 	/*
 	 * A running task can be switched into ghost while it is executing
@@ -5511,23 +5708,26 @@ static void task_deliver_msg_affinity_changed(struct rq *rq,
 	if (__task_deliver_common(rq, p))
 		return;
 
-	msg->type = MSG_TASK_AFFINITY_CHANGED;
+	msg.type = MSG_TASK_AFFINITY_CHANGED;
 	//payload->gtid = gtid(p);
 	payload->pid = p->pid;
+	payload->cpumask = cpumask_bits(mask)[0];
 
-	produce_for_task(p, msg);
+	produce_for_task(p, &msg);
 }
 
 static void task_deliver_msg_latched(struct rq *rq, struct task_struct *p,
 				     bool latched_preempt)
 {
-	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
-	struct ghost_msg_payload_task_latched *payload = &msg->latched;
+	struct bpf_ghost_msg msg;
+	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct ghost_msg_payload_task_latched *payload = &msg.latched;
+	memset(&msg, 0, sizeof(msg));
 
 	if (__task_deliver_common(rq, p))
 		return;
 
-	msg->type = MSG_TASK_LATCHED;
+	msg.type = MSG_TASK_LATCHED;
 	//payload->gtid = gtid(p);
 	payload->pid = p->pid;
 	payload->commit_time = ktime_get_ns();
@@ -5535,7 +5735,7 @@ static void task_deliver_msg_latched(struct rq *rq, struct task_struct *p,
 	payload->cpu_seqnum = ++rq->ghost.cpu_seqnum;
 	payload->latched_preempt = latched_preempt;
 
-	produce_for_task(p, msg);
+	produce_for_task(p, &msg);
 }
 
 static inline bool deferrable_wakeup(struct task_struct *p)
@@ -5554,13 +5754,15 @@ static inline bool deferrable_wakeup(struct task_struct *p)
 
 static void task_deliver_msg_wakeup(struct rq *rq, struct task_struct *p)
 {
-	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
-	struct ghost_msg_payload_task_wakeup *payload = &msg->wakeup;
+	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct bpf_ghost_msg msg;
+	struct ghost_msg_payload_task_wakeup *payload = &msg.wakeup;
+	memset(&msg, 0, sizeof(msg));
 
 	if (__task_deliver_common(rq, p))
 		return;
 
-	msg->type = MSG_TASK_WAKEUP;
+	msg.type = MSG_TASK_WAKEUP;
 	//payload->gtid = gtid(p);
 	payload->pid = p->pid;
 	payload->agent_data = 0;
@@ -5569,32 +5771,42 @@ static void task_deliver_msg_wakeup(struct rq *rq, struct task_struct *p)
 	payload->wake_up_cpu = p->ghost.twi.wake_up_cpu;
 	payload->waker_cpu = p->ghost.twi.waker_cpu;
 
-	produce_for_task(p, msg);
+	produce_for_task(p, &msg);
 }
 
 static void task_deliver_msg_switchto(struct rq *rq, struct task_struct *p)
 {
-	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
-	struct ghost_msg_payload_task_switchto *payload = &msg->switchto;
+	struct bpf_ghost_msg msg;
+	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct ghost_msg_payload_task_switchto *payload = &msg.switchto;
+	memset(&msg, 0, sizeof(msg));
 
 	if (__task_deliver_common(rq, p))
 		return;
 
-	msg->type = MSG_TASK_SWITCHTO;
+	msg.type = MSG_TASK_SWITCHTO;
 	//payload->gtid = gtid(p);
 	payload->pid = p->pid;
 	payload->runtime = p->se.sum_exec_runtime;
 	payload->cpu = cpu_of(rq);
 	payload->cpu_seqnum = ++rq->ghost.cpu_seqnum;
 
-	produce_for_task(p, msg);
+	produce_for_task(p, &msg);
 }
 
 static inline int cpu_deliver_msg_pnt(struct rq *rq,
 				      struct ghost_agent_type *agent_type)
 {
-	struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
-	struct ghost_msg_payload_pnt *payload = &msg->pnt;
+	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct bpf_ghost_msg msg;
+	struct ghost_msg_payload_pnt *payload;
+	//struct timespec64 start;
+	//struct timespec64 end;
+	int ret;
+	//ktime_get_real_ts64(&start);
+	memset(&msg, 0, sizeof(msg));
+	payload = &msg.pnt;
+	//ktime_get_real_ts64(&start);
 	//struct ghost_enclave *e;
 
 	//if (cpu_skip_message(rq))
@@ -5606,12 +5818,51 @@ static inline int cpu_deliver_msg_pnt(struct rq *rq,
 	//	return false;
 	//}
 	//rcu_read_unlock();
-
-	msg->type = MSG_PNT;
+	msg.type = MSG_PNT;
 	payload->cpu = cpu_of(rq);
+	//ktime_get_real_ts64(&step1);
 
-	produce_for_agent_type(agent_type, msg);
+	//rcu_read_lock();
+	produce_for_agent_type(agent_type, &msg);
+	//if (agent_type && agent_type->process_message) {
+	//	if (lock) {
+	//	read_lock(&agent_type->agent_lock);
+	//	}
+		//printk(KERN_INFO "calling message send");
+		//ktime_get_real_ts64(&step1);
+		//agent_type->process_message(agent_type->agent,
+		//		type, msglen, barrier,
+		//		payload, payload_size, &ret);
+	//ktime_get_real_ts64(&step2);
+	//	agent_type->pick_next_task(agent_type->agent, cpu_of(rq), &ret);
+	//rcu_read_unlock();
+	//ktime_get_real_ts64(&step3);
+		//ktime_get_real_ts64(&step2);
+		//printk(KERN_INFO "got ret %d\n", ret);
+	//	if (lock) {
+	//	read_unlock(&agent_type->agent_lock);
+	//ktime_get_real_ts64(&end);
+	//	if (do_report_timing % 10000 == 0) {
+	//		struct timespec64 diff1 = timespec64_sub(step1, start);
+	//		struct timespec64 diff2 = timespec64_sub(step2, step1);
+	//		struct timespec64 diff3 = timespec64_sub(step3, step2);
+	//		struct timespec64 diff4 = timespec64_sub(end, step3);
+	//		s64 ns_diff1 = timespec64_to_ns(&diff1);
+	//		s64 ns_diff2 = timespec64_to_ns(&diff2);
+	//		s64 ns_diff3 = timespec64_to_ns(&diff3);
+	//		s64 ns_diff4 = timespec64_to_ns(&diff4);
+	//		printk(KERN_INFO "pick_next call %d, %d, %d, %d\n", ns_diff1, ns_diff2, ns_diff3, ns_diff4);
+	//	}
+	//	return ret;
+	//	}
+	//}
 	if (payload->pick_task) {
+		//ktime_get_real_ts64(&end);
+		//if (do_report_timing % 10000 == 0) {
+		//	struct timespec64 diff = timespec64_sub(end, start);
+		//	s64 ns_diff = timespec64_to_ns(&diff);
+		//	printk(KERN_INFO "pick_next call %d\n", ns_diff);
+		//}
 		return payload->ret_pid;
 	} else {
 		return -1;
@@ -6026,6 +6277,25 @@ void ghost_task_new(struct rq *rq, struct task_struct *p)
 	_ghost_task_new(rq, p, task_on_rq_queued(p));
 }
 
+//static void _ghost_task_new_agent_type(struct ghost_agent_type *agent, struct task_struct *p, bool runnable)
+//{
+//	//lockdep_assert_held(&rq->lock);
+//	//VM_BUG_ON(task_rq(p) != rq);
+//
+//	////enclave_add_task(p->ghost.enclave, p);
+//
+//        ///* See explanation in ghost_task_preempted() */
+//        //if (p == rq->curr)
+//        //       update_curr_ghost(rq);
+//
+//	task_deliver_msg_task_new_agent(agent, p, runnable);
+//}
+//
+//void ghost_task_new_agent_type(struct ghost_agent_type *agent, struct task_struct *p)
+//{
+//	_ghost_task_new_agent_type(agent, p, task_on_rq_queued(p));
+//}
+
 static void ghost_task_yield(struct rq *rq, struct task_struct *p)
 {
 	lockdep_assert_held(&rq->lock);
@@ -6040,10 +6310,18 @@ static void ghost_task_yield(struct rq *rq, struct task_struct *p)
 
 static void ghost_task_blocked(struct rq *rq, struct task_struct *p)
 {
+	//struct timespec64 start, end;
+	//ktime_get_real_ts64(&start);
 	lockdep_assert_held(&rq->lock);
 	VM_BUG_ON(task_rq(p) != rq);
 
 	task_deliver_msg_blocked(rq, p);
+	//ktime_get_real_ts64(&end);
+	//if (do_report_timing % 10000 == 0) {
+	//	struct timespec64 diff = timespec64_sub(end, start);
+	//	s64 ns_diff = timespec64_to_ns(&diff);
+	//	printk(KERN_INFO "blocked %d\n", ns_diff);
+	//}
 }
 
 void ghost_wait_for_rendezvous(struct rq *rq)
@@ -6341,7 +6619,7 @@ static int __ghost_run_pid_on(uint64_t pid, int run_flags,
 	//	return -EXDEV;
 	//}
 
-	rcu_read_lock();
+	//rcu_read_lock();
 	next = find_task_by_pid_ns(pid, &init_pid_ns);
 	this_rq = cpu_rq(cpu);
 	//old_rq = cpu_rq(old_cpu);
@@ -6358,7 +6636,7 @@ static int __ghost_run_pid_on(uint64_t pid, int run_flags,
 	}
 	double_lock_balance(this_rq, old_rq);
 	//rq = task_rq(next);
-	rcu_read_unlock();
+	//rcu_read_unlock();
 
 	err = validate_next_task(this_rq, next, /*state=*/ NULL);
 	if (err) {
@@ -7569,39 +7847,39 @@ EXPORT_SYMBOL(ghost_run_pid_on);
 //	rq_unlock_irqrestore(rq, &rf);
 //}
 
-static int ghost_gtid_lookup(int64_t id, int op, int flags, int64_t __user *out)
-{
-	int error = 0;
-	int64_t result;
-	struct task_struct *target;
-
-	if (flags)
-		return -EINVAL;
-
-	rcu_read_lock();
-	target = find_task_by_gtid(id);
-	if (!target) {
-		rcu_read_unlock();
-		return -ESRCH;
-	}
-
-	switch (op) {
-	case GHOST_GTID_LOOKUP_TGID:
-		result = task_tgid_nr(target);
-		break;
-	default:
-		error = -EINVAL;
-		break;
-	}
-	rcu_read_unlock();
-
-	if (!error) {
-		if (copy_to_user(out, &result, sizeof(result)))
-			error = -EFAULT;
-	}
-
-	return error;
-}
+//static int ghost_gtid_lookup(int64_t id, int op, int flags, int64_t __user *out)
+//{
+//	int error = 0;
+//	int64_t result;
+//	struct task_struct *target;
+//
+//	if (flags)
+//		return -EINVAL;
+//
+//	rcu_read_lock();
+//	target = find_task_by_gtid(id);
+//	if (!target) {
+//		rcu_read_unlock();
+//		return -ESRCH;
+//	}
+//
+//	switch (op) {
+//	case GHOST_GTID_LOOKUP_TGID:
+//		result = task_tgid_nr(target);
+//		break;
+//	default:
+//		error = -EINVAL;
+//		break;
+//	}
+//	rcu_read_unlock();
+//
+//	if (!error) {
+//		if (copy_to_user(out, &result, sizeof(result)))
+//			error = -EFAULT;
+//	}
+//
+//	return error;
+//}
 
 static int ghost_get_gtid(int64_t __user *out)
 {
@@ -7620,26 +7898,27 @@ static int ghost_get_gtid(int64_t __user *out)
 SYSCALL_DEFINE6(ghost, u64, op, u64, arg1, u64, arg2,
 		u64, arg3, u64, arg4, u64, arg5)
 {
-	bool be_nice = true;
-
-	if (op == GHOST_BASE_GET_GTID)
-		be_nice = false;
-
-	if (be_nice && !capable(CAP_SYS_NICE))
-		return -EPERM;
-
-	switch (op) {
-	case GHOST_GTID_LOOKUP:
-		return ghost_gtid_lookup(arg1, arg2, arg3,
-					 (int64_t __user *)arg4);
-	case GHOST_BASE_GET_GTID:
-		return ghost_get_gtid((int64_t __user *)arg1);
-	default:
-		if (op >= _GHOST_BASE_OP_FIRST)
-			return -EOPNOTSUPP;
-		else
-			return -EINVAL;
-	}
+//	bool be_nice = true;
+//
+//	if (op == GHOST_BASE_GET_GTID)
+//		be_nice = false;
+//
+//	if (be_nice && !capable(CAP_SYS_NICE))
+//		return -EPERM;
+//
+//	switch (op) {
+//	case GHOST_GTID_LOOKUP:
+//		return ghost_gtid_lookup(arg1, arg2, arg3,
+//					 (int64_t __user *)arg4);
+//	case GHOST_BASE_GET_GTID:
+//		return ghost_get_gtid((int64_t __user *)arg1);
+//	default:
+//		if (op >= _GHOST_BASE_OP_FIRST)
+//			return -EOPNOTSUPP;
+//		else
+//			return -EINVAL;
+//	}
+	return 0;
 }
 
 #ifndef SYS_SWITCHTO_SWITCH_FLAGS_LAZY_EXEC_CLOCK
@@ -7707,51 +7986,51 @@ void ghost_cpu_idle(void)
 	rq_unlock_irq(rq, &rf);
 }
 
-unsigned long ghost_cfs_added_load(struct rq *rq)
-{
-	int ghost_nr_running = rq->ghost.ghost_nr_running;
-	struct task_struct *curr;
-	bool add_load = false;
-
-	/* No ghost tasks; nothing to contribute load. */
-	if (!ghost_nr_running)
-		return 0;
-
-	/*
-	 * We have a few cases where we want to add load:
-	 * (a): We have a local agent that is not blocked_in_run.
-	 * (b): Currently have a non-agent ghost task running.
-	 * (c): Have a latched task that is not yet running. We
-	 * treat this the same as case (b), since this is really
-	 * just a race over getting through schedule() (modulo possible
-	 * preemption by another sched_class).
-	 */
-
-	if (ghost_nr_running > __ghost_extra_nr_running(rq)) {
-		/* (a) */
-		add_load = true;
-		goto out;
-	}
-
-	rcu_read_lock();
-	curr = READ_ONCE(rq->curr);
-	if (task_has_ghost_policy(curr) && !is_agent(rq, curr) &&
-	    curr->state == TASK_RUNNING) {
-		/* (b) */
-		add_load = true;
-	}
-	curr = NULL; /* don't use outside of RCU */
-	rcu_read_unlock();
-	if (add_load)
-		goto out;
-
-	if (rq->ghost.latched_task) {
-		/* (c) */
-		add_load = true;
-	}
-
-out:
-	if (add_load)
-		return sysctl_ghost_cfs_load_added;
-	return 0;
-}
+//unsigned long ghost_cfs_added_load(struct rq *rq)
+//{
+//	int ghost_nr_running = rq->ghost.ghost_nr_running;
+//	struct task_struct *curr;
+//	bool add_load = false;
+//
+//	/* No ghost tasks; nothing to contribute load. */
+//	if (!ghost_nr_running)
+//		return 0;
+//
+//	/*
+//	 * We have a few cases where we want to add load:
+//	 * (a): We have a local agent that is not blocked_in_run.
+//	 * (b): Currently have a non-agent ghost task running.
+//	 * (c): Have a latched task that is not yet running. We
+//	 * treat this the same as case (b), since this is really
+//	 * just a race over getting through schedule() (modulo possible
+//	 * preemption by another sched_class).
+//	 */
+//
+//	if (ghost_nr_running > __ghost_extra_nr_running(rq)) {
+//		/* (a) */
+//		add_load = true;
+//		goto out;
+//	}
+//
+//	rcu_read_lock();
+//	curr = READ_ONCE(rq->curr);
+//	if (task_has_ghost_policy(curr) && !is_agent(rq, curr) &&
+//	    curr->state == TASK_RUNNING) {
+//		/* (b) */
+//		add_load = true;
+//	}
+//	curr = NULL; /* don't use outside of RCU */
+//	rcu_read_unlock();
+//	if (add_load)
+//		goto out;
+//
+//	if (rq->ghost.latched_task) {
+//		/* (c) */
+//		add_load = true;
+//	}
+//
+//out:
+//	if (add_load)
+//		return sysctl_ghost_cfs_load_added;
+//	return 0;
+//}
