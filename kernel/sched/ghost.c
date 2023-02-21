@@ -976,7 +976,7 @@ enqueue_task_ghost(struct rq *rq, struct task_struct *p, int flags)
 	//printk(KERN_INFO "enqueuing running %d\n", rq->ghost.ghost_nr_running);
 	add_nr_running(rq, 1);
 	rq->ghost.ghost_nr_running++;
-//	printk(KERN_INFO "enqueue_task_ghost %d, running %d\n", p->pid, rq->ghost.ghost_nr_running);
+	//printk(KERN_INFO "enqueue_task_ghost %d, running %d\n", p->pid, rq->ghost.ghost_nr_running);
 
 	//WARN_ON_ONCE(on_ghost_rq(rq, p));
 	//list_add_tail(&p->ghost.run_list, &rq->ghost.tasks);

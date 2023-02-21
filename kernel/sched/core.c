@@ -683,6 +683,13 @@ void resched_cpu(int cpu)
 }
 EXPORT_SYMBOL(resched_cpu);
 
+u64 cpu_clock_task(int cpu)
+{
+	struct rq *rq = cpu_rq(cpu);
+	return rq_clock_task(rq);
+}
+EXPORT_SYMBOL(cpu_clock_task);
+
 #ifdef CONFIG_SMP
 /*
  * Guarantee that the given cpu will reschedule. Useful for situations where

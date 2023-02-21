@@ -239,6 +239,7 @@ extern void io_schedule(void);
 extern void resched_curr(struct rq *rq);
 extern void resched_cpu(int cpu);
 extern void resched_cpu_no_lock(int cpu);
+extern u64 cpu_clock_task(int cpu);
 
 /**
  * struct prev_cputime - snapshot of system and user cputime
