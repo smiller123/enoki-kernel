@@ -4144,7 +4144,9 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int initial)
 	}
 
 	/* ensure we never gain time by being placed backwards. */
+	//if (do_report_timing != 100000) {
 	se->vruntime = max_vruntime(se->vruntime, vruntime);
+	//}
 }
 
 static void check_enqueue_throttle(struct cfs_rq *cfs_rq);
@@ -4447,6 +4449,11 @@ pick_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 {
 	struct sched_entity *left = __pick_first_entity(cfs_rq);
 	struct sched_entity *se;
+	//if (do_report_timing == 100000) {
+	//	struct rb_node *left = rb_first_cached(&cfs_rq->tasks_timeline);
+	//	while (left) {
+	//	}
+	//}
 
 	/*
 	 * If curr is set we have to see if its left of the leftmost entity
@@ -4461,12 +4468,14 @@ pick_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 	 * Avoid running the skip buddy, if running something else can
 	 * be done without getting too unfair.
 	 */
+	//if (do_report_timing != 100000) {
 	if (cfs_rq->skip == se) {
 		struct sched_entity *second;
 
 		if (se == curr) {
 			second = __pick_first_entity(cfs_rq);
 		} else {
+			//printk(KERN_INFO "skipping entity");
 			second = __pick_next_entity(se);
 			if (!second || (curr && entity_before(curr, second)))
 				second = curr;
@@ -4477,6 +4486,7 @@ pick_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 	}
 
 	if (cfs_rq->next && wakeup_preempt_entity(cfs_rq->next, left) < 1) {
+		//printk(KERN_INFO "running next");
 		/*
 		 * Someone really wants this to run. If it's not unfair, run it.
 		 */
@@ -4486,7 +4496,9 @@ pick_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 		 * Prefer last buddy, try to return the CPU to a preempted task.
 		 */
 		se = cfs_rq->last;
+		//printk(KERN_INFO "running preempted");
 	}
+	//}
 
 	clear_buddies(cfs_rq, se);
 
@@ -5424,6 +5436,9 @@ static void hrtick_start_fair(struct rq *rq, struct task_struct *p)
 			return;
 		}
 		hrtick_start(rq, delta);
+		//if (do_report_timing == 100000) {
+		//	printk(KERN_INFO "starting timer %d ns %d tasks", delta, rq->cfs.h_nr_running);
+		//}
 	}
 }
 
@@ -5498,6 +5513,9 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	struct sched_entity *se = &p->se;
 	int idle_h_nr_running = task_has_idle_policy(p);
 	int task_new = !(flags & ENQUEUE_WAKEUP);
+	if (do_report_timing == 100000) {
+		//printk(KERN_INFO "enqueing pid %d, cpu %d, flags %d\n", p->pid, cpu_of(rq), flags);
+	}
 
 	/*
 	 * The code below (indirectly) updates schedutil which looks at
@@ -5608,6 +5626,9 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	int task_sleep = flags & DEQUEUE_SLEEP;
 	int idle_h_nr_running = task_has_idle_policy(p);
 	bool was_sched_idle = sched_idle_rq(rq);
+	if (do_report_timing == 100000) {
+		//printk(KERN_INFO "dequeuing pid %d, cpu %d, flags %d\n", p->pid, cpu_of(rq), flags);
+	}
 
 	for_each_sched_entity(se) {
 		cfs_rq = cfs_rq_of(se);
@@ -6730,6 +6751,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 	//struct timespec64 start;
 	//struct timespec64 end;
 	//ktime_get_real_ts64(&start);
+	int pathway = 0;
 
 	if (wake_flags & WF_TTWU) {
 		record_wakee(p);
@@ -6737,6 +6759,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 		if (sched_energy_enabled()) {
 			new_cpu = find_energy_efficient_cpu(p, prev_cpu);
 			if (new_cpu >= 0) {
+				//printk(KERN_INFO "select for %d switching to energy cpu %d from %d", p->pid, prev_cpu, new_cpu);
 				//ktime_get_real_ts64(&end);
 				//if (do_report_timing % 100000 == 0) {
 				//	struct timespec64 diff = timespec64_sub(end, start);
@@ -6759,8 +6782,10 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 		 */
 		if (want_affine && (tmp->flags & SD_WAKE_AFFINE) &&
 		    cpumask_test_cpu(prev_cpu, sched_domain_span(tmp))) {
-			if (cpu != prev_cpu)
+			if (cpu != prev_cpu) {
+				pathway = 1;
 				new_cpu = wake_affine(tmp, p, cpu, prev_cpu, sync);
+			}
 
 			sd = NULL; /* Prefer wake_affine over balance flags */
 			break;
@@ -6774,21 +6799,35 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 
 	if (unlikely(sd)) {
 		/* Slow path */
-		new_cpu = find_idlest_cpu(sd, p, cpu, prev_cpu, sd_flag);
+		pathway = 2;
+
+		//if (do_report_timing == 100000) {
+	//		new_cpu = p->pid % 6;
+	//	} else {
+			new_cpu = find_idlest_cpu(sd, p, cpu, prev_cpu, sd_flag);
+	//	}
 	} else if (wake_flags & WF_TTWU) { /* XXX always ? */
 		/* Fast path */
+		//if (do_report_timing == 100000) {
+		//	new_cpu = prev_cpu;
+		//} else {
+		pathway = 3;
 		new_cpu = select_idle_sibling(p, prev_cpu, new_cpu);
 
 		if (want_affine)
 			current->recent_used_cpu = cpu;
+		//}
 	}
 	rcu_read_unlock();
 	//ktime_get_real_ts64(&end);
-	//if (do_report_timing % 100000 == 0) {
+	if (do_report_timing == 100000) {
 	//	struct timespec64 diff = timespec64_sub(end, start);
 	//	s64 ns_diff = timespec64_to_ns(&diff);
 	//	printk(KERN_INFO "select %d\n", ns_diff);
-	//}
+		//if (new_cpu != prev_cpu) {
+			//printk(KERN_INFO "select for %d prev_cpu %d, cpu %d, new_cpu %d path %d\n", p->pid, prev_cpu, cpu, new_cpu, pathway);
+		//}
+	}
 
 	return new_cpu;
 }
@@ -6808,6 +6847,9 @@ static void migrate_task_rq_fair(struct task_struct *p, int new_cpu)
 	 * min_vruntime -- the latter is done by enqueue_entity() when placing
 	 * the task on the new runqueue.
 	 */
+	if (do_report_timing == 100000) {
+		//printk(KERN_INFO "pid %d migrating %d to %d", p->pid, task_cpu(p), new_cpu);
+	}
 	if (p->state == TASK_WAKING) {
 		struct sched_entity *se = &p->se;
 		struct cfs_rq *cfs_rq = cfs_rq_of(se);
@@ -7076,6 +7118,7 @@ again:
 	 * hierarchy, only change the part that actually changes.
 	 */
 
+	int running = 0;
 	do {
 		struct sched_entity *curr = cfs_rq->curr;
 
@@ -7134,6 +7177,7 @@ again:
 				se = parent_entity(se);
 			}
 		}
+		running = cfs_rq->nr_running;
 
 		put_prev_entity(cfs_rq, pse);
 		set_next_entity(cfs_rq, se);
@@ -7168,7 +7212,8 @@ done: __maybe_unused;
 
 	update_misfit_status(p, rq);
 	//ktime_get_real_ts64(&end);
-	//if (do_report_timing % 100000 == 0) {
+	if (do_report_timing == 100000 && p) {
+		//printk(KERN_INFO "cpu %d picking pid %d runtime %lld running %d\n", cpu_of(rq), p->pid, p->se.vruntime, running);
 	//	struct timespec64 diff = timespec64_sub(end, start);
 	////	struct timespec64 diff11 = timespec64_sub(step11, step1);
 	////	struct timespec64 diff15 = timespec64_sub(step15, step11);
@@ -7183,7 +7228,7 @@ done: __maybe_unused;
 	////	printk(KERN_INFO "pick_next %d %d %d %d %d\n", ns_diff1, ns_diff11, ns_diff15, ns_diff2, ns_diff3);
 	//////	report_timing += 1;
       	////////do_report_timing = false;
-	//}
+	}
 
 	return p;
 
@@ -7808,6 +7853,10 @@ static int detach_tasks(struct lb_env *env)
 
 		detach_task(p, env);
 		list_add(&p->se.group_node, &env->tasks);
+		if (do_report_timing == 100000) {
+		//if (p->pid > 2000 && p->pid < 3000) {
+			//printk(KERN_INFO "moved task pid %d from %d to %d migration %d", p->pid, env->src_cpu, env->dst_cpu, env->migration_type);
+		}
 
 		detached++;
 
@@ -9112,8 +9161,12 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 
 	if (busiest->group_type == group_misfit_task) {
 		/* Set imbalance to allow misfit tasks to be balanced. */
+		//if (do_report_timing == 100000) {
+			env->imbalance = 0;
+		//} else {
 		env->migration_type = migrate_misfit;
 		env->imbalance = 1;
+		//}
 		return;
 	}
 
@@ -9122,8 +9175,12 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 		 * In case of asym capacity, we will try to migrate all load to
 		 * the preferred CPU.
 		 */
+		//if (do_report_timing == 100000) {
+		//	env->imbalance = 0;
+		//} else {
 		env->migration_type = migrate_task;
 		env->imbalance = busiest->sum_h_nr_running;
+		//}
 		return;
 	}
 
@@ -9134,8 +9191,12 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 		 * the imbalance. The next load balance will take care of
 		 * balancing back the system.
 		 */
+		//if (do_report_timing == 100000) {
+		//	env->imbalance = 0;
+		//} else {
 		env->migration_type = migrate_task;
 		env->imbalance = 1;
+		//}
 		return;
 	}
 
@@ -9154,9 +9215,13 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 			 * amount of load to migrate in order to balance the
 			 * system.
 			 */
+			//if (do_report_timing == 100000) {
+			//	env->imbalance = 0;
+			//} else {
 			env->migration_type = migrate_util;
 			env->imbalance = max(local->group_capacity, local->group_util) -
 					 local->group_util;
+			//}
 
 			/*
 			 * In some cases, the group's utilization is max or even
@@ -9166,8 +9231,12 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 			 * try to pull it.
 			 */
 			if (env->idle != CPU_NOT_IDLE && env->imbalance == 0) {
+				//if (do_report_timing == 100000) {
+				//	env->imbalance = 0;
+				//} else {
 				env->migration_type = migrate_task;
 				env->imbalance = 1;
+				//}
 			}
 
 			return;
@@ -9179,18 +9248,26 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 			 * When prefer sibling, evenly spread running tasks on
 			 * groups.
 			 */
+			//if (do_report_timing == 100000) {
+			//	env->imbalance = 0;
+			//} else {
 			env->migration_type = migrate_task;
 			lsub_positive(&nr_diff, local->sum_nr_running);
 			env->imbalance = nr_diff >> 1;
+			//}
 		} else {
 
 			/*
 			 * If there is no overload, we just want to even the number of
 			 * idle cpus.
 			 */
+			//if (do_report_timing == 100000) {
+			//	env->imbalance = 0;
+			//} else {
 			env->migration_type = migrate_task;
 			env->imbalance = max_t(long, 0, (local->idle_cpus -
 						 busiest->idle_cpus) >> 1);
+			//}
 		}
 
 		/* Consider allowing a small imbalance between NUMA groups */
@@ -9235,11 +9312,15 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 	 * reduce the group load below the group capacity. Thus we look for
 	 * the minimum possible imbalance.
 	 */
+	//if (do_report_timing == 100000) {
+	//	env->imbalance = 0;
+	//} else {
 	env->migration_type = migrate_load;
 	env->imbalance = min(
 		(busiest->avg_load - sds->avg_load) * busiest->group_capacity,
 		(sds->avg_load - local->avg_load) * local->group_capacity
 	) / SCHED_CAPACITY_SCALE;
+	//}
 }
 
 /******* find_busiest_group() helpers end here *********************/
@@ -9279,6 +9360,9 @@ static struct sched_group *find_busiest_group(struct lb_env *env)
 {
 	struct sg_lb_stats *local, *busiest;
 	struct sd_lb_stats sds;
+	//if (do_report_timing == 100000) {
+	//	goto out_balanced;
+	//}
 
 	init_sd_lb_stats(&sds);
 
@@ -9299,24 +9383,31 @@ static struct sched_group *find_busiest_group(struct lb_env *env)
 	busiest = &sds.busiest_stat;
 
 	/* There is no busy sibling group to pull tasks from */
-	if (!sds.busiest)
+	if (!sds.busiest) {
 		goto out_balanced;
+	}
 
 	/* Misfit tasks should be dealt with regardless of the avg load */
-	if (busiest->group_type == group_misfit_task)
+	if (busiest->group_type == group_misfit_task) {
+		//printk(KERN_INFO "misfit");
 		goto force_balance;
+	}
 
 	/* ASYM feature bypasses nice load balance check */
-	if (busiest->group_type == group_asym_packing)
+	if (busiest->group_type == group_asym_packing) {
+		//printk(KERN_INFO "asym");
 		goto force_balance;
+	}
 
 	/*
 	 * If the busiest group is imbalanced the below checks don't
 	 * work because they assume all things are equal, which typically
 	 * isn't true due to cpus_ptr constraints and the like.
 	 */
-	if (busiest->group_type == group_imbalanced)
+	if (busiest->group_type == group_imbalanced) {
+		//printk(KERN_INFO "imbalanced");
 		goto force_balance;
+	}
 
 	/*
 	 * If the local group is busier than the selected busiest group
@@ -9355,12 +9446,15 @@ static struct sched_group *find_busiest_group(struct lb_env *env)
 		if (100 * busiest->avg_load <=
 				env->sd->imbalance_pct * local->avg_load)
 			goto out_balanced;
+		//printk(KERN_INFO "overloaded");
 	}
 
 	/* Try to move all excess tasks to child's sibling domain */
 	if (sds.prefer_sibling && local->group_type == group_has_spare &&
-	    busiest->sum_nr_running > local->sum_nr_running + 1)
+	    busiest->sum_nr_running > local->sum_nr_running + 1) {
+		//printk(KERN_INFO "prefer sibling");
 		goto force_balance;
+	}
 
 	if (busiest->group_type != group_overloaded) {
 		if (env->idle == CPU_NOT_IDLE)

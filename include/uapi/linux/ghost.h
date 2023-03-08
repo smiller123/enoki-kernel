@@ -286,7 +286,9 @@ enum {
 	MSG_CPU_TIMER_EXPIRED,
 	MSG_CPU_NOT_IDLE,	/* requested via run_flags: NEED_CPU_NOT_IDLE */
 	MSG_PNT,
+	MSG_PNT_ERR,
 	MSG_BALANCE,
+	MSG_BALANCE_ERR,
 	MSG_REREGISTER_PREPARE,
 	MSG_REREGISTER_INIT,
 	MSG_MSG_SIZE,
@@ -306,6 +308,7 @@ struct ghost_msg_payload_task_new {
 	uint64_t runtime;	/* cumulative runtime in ns */
 	uint16_t runnable;
 	int prio;
+	int wake_up_cpu;
 	struct ghost_sw_info sw_info;
 };
 
@@ -412,8 +415,22 @@ struct ghost_msg_payload_pnt {
 	uint64_t ret_pid;
 };
 
+struct ghost_msg_payload_pnt_err {
+	int cpu;
+	uint64_t pid;
+	int err;
+};
+
+struct ghost_msg_payload_balance_err {
+	int cpu;
+	uint64_t pid;
+	int err;
+};
+
 struct ghost_msg_payload_select_task_rq {
 	uint64_t pid;
+	int waker_cpu;
+	int prev_cpu;
 	int ret_cpu;
 };
 
@@ -481,9 +498,11 @@ struct bpf_ghost_msg {
 		struct ghost_msg_payload_timer		timer;
 		struct ghost_msg_payload_cpu_not_idle	cpu_not_idle;
 		struct ghost_msg_payload_pnt		pnt;
+		struct ghost_msg_payload_pnt_err	pnt_err;
 		struct ghost_msg_payload_select_task_rq select;
 		struct ghost_msg_payload_migrate_task_rq migrate;
 		struct ghost_msg_payload_balance	balance;
+		struct ghost_msg_payload_balance_err	balance_err;
 		struct ghost_msg_payload_task_prio_changed	prio_changed;
 		struct ghost_msg_payload_rereg_prep	rereg_prep;
 		struct ghost_msg_payload_rereg_init	rereg_init;

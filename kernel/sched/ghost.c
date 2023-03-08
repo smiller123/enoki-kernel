@@ -93,6 +93,8 @@ static void migrate_task_rq_ghost(struct task_struct *p, int new_cpu);
 static int select_task_rq_ghost(struct task_struct *p, int cpu, int wake_flags);
 static bool cpu_deliver_msg_tick(struct rq *rq, struct task_struct *p, int queued);
 static int cpu_deliver_msg_pnt(struct rq *rq, struct ghost_agent_type *agent_type);
+static void cpu_deliver_msg_pnt_err(struct rq *rq, int pid, int err,
+				    struct ghost_agent_type *agent_type);
 static int task_target_cpu(struct task_struct *p);
 //static int agent_target_cpu(struct rq *rq);
 //static inline bool ghost_txn_ready(int cpu);
@@ -268,6 +270,7 @@ int register_ghost_agent(const void *agent,
 		*p = agent_type;
 	write_unlock(&ghost_agents_lock);
 	printk(KERN_INFO "ghost agent name registered %d, ptr %p", policy, agent);
+	do_report_timing = 100000;
 	return res;
 }
 EXPORT_SYMBOL(register_ghost_agent);
@@ -754,7 +757,7 @@ done:
 
 static inline void schedule_agent(struct rq *rq, bool resched)
 {
-	schedule_next(rq, GHOST_AGENT_GTID, resched);
+	//schedule_next(rq, GHOST_AGENT_GTID, resched);
 }
 
 static inline void force_offcpu(struct rq *rq, bool resched)
@@ -838,6 +841,7 @@ static void switched_to_ghost(struct rq *rq, struct task_struct *p)
 
 	if (is_agent(rq, p) || !task_running(rq, p)) {
 		//printk(KERN_INFO "switched_to path 1\n");
+		p->ghost.new_task = false;
 		ghost_task_new(rq, p);
 		//ghost_wake_agent_of(p);    /* no-op if 'p' is an agent */
 	} else {
@@ -918,6 +922,7 @@ static void dequeue_task_ghost(struct rq *rq, struct task_struct *p, int flags)
 	if (task_current(rq, p))
 		update_curr_ghost(rq);
 
+	//printk(KERN_INFO "dequeue task %d flags %d\n", p->pid, flags);
 	//printk(KERN_INFO "dequeueng running %d\n", rq->ghost.ghost_nr_running);
 	BUG_ON(rq->ghost.ghost_nr_running <= 0);
 	rq->ghost.ghost_nr_running--;
@@ -966,13 +971,14 @@ static void dequeue_task_ghost(struct rq *rq, struct task_struct *p, int flags)
 
 static void put_prev_task_ghost(struct rq *rq, struct task_struct *p)
 {
-	//printk(KERN_INFO "put_prev_task_ghost getting called\n");
+	//printk(KERN_INFO "put_prev_task_ghost getting called pid %d, on_rq %d\n", p->pid, p->on_rq);
 	update_curr_ghost(rq);
 }
 
 static void
 enqueue_task_ghost(struct rq *rq, struct task_struct *p, int flags)
 {
+	//printk(KERN_INFO "enqueue task %d flags %d\n", p->pid, flags);
 	//printk(KERN_INFO "enqueuing running %d\n", rq->ghost.ghost_nr_running);
 	add_nr_running(rq, 1);
 	rq->ghost.ghost_nr_running++;
@@ -1021,7 +1027,7 @@ static void set_next_task_ghost(struct rq *rq, struct task_struct *p,
 	 * (another approach might be to produce a TASK_CHANGED msg here and
 	 *  let the agent figure out exactly what changed).
 	 */
-	schedule_agent(rq, true);
+	//schedule_agent(rq, true);
 }
 
 /*
@@ -1306,15 +1312,21 @@ bool ghost_produce_prev_msgs(struct rq *rq, struct task_struct *prev)
 {
 	//printk(KERN_INFO "producing messages");
 	//return false;
-	if (!task_has_ghost_policy(prev))
+	if (!task_has_ghost_policy(prev)) {
+		//if (cpu_of(rq) == 0) {
+		//printk(KERN_INFO "not producing messages wrong policy %d", prev->pid);
+		//}
 		return false;
+	}
 
 	/* Who watches the watchmen? */
-	if (prev == rq->ghost.agent)
-		return false;
+	//if (prev == rq->ghost.agent)
+	//	return false;
 
 	if (prev->ghost.new_task) {
-		//printk(KERN_INFO "producing messages new task");
+		//if (cpu_of(rq) == 0) {
+		//printk(KERN_INFO "not producing messages new task %d", prev->pid);
+		//}
 		prev->ghost.new_task = false;
 		ghost_task_new(rq, prev);
 		//ghost_wake_agent_of(prev);
@@ -1336,7 +1348,9 @@ bool ghost_produce_prev_msgs(struct rq *rq, struct task_struct *prev)
 	 * off the cpu we can safely let the agent know about it.
 	 */
 	if (prev->ghost.yield_task) {
-		//printk(KERN_INFO "producing messages yield task");
+		//if (cpu_of(rq) == 0) {
+		//printk(KERN_INFO "not producing messages yield task %d", prev->pid);
+		//}
 		WARN_ON_ONCE(prev->ghost.blocked_task);
 		prev->ghost.yield_task = false;
 		//ghost_task_yield(rq, prev);
@@ -1345,7 +1359,9 @@ bool ghost_produce_prev_msgs(struct rq *rq, struct task_struct *prev)
 	}
 
 	if (prev->ghost.blocked_task) {
-		//printk(KERN_INFO "producing messages blocked");
+		//if (cpu_of(rq) == 0) {
+		//printk(KERN_INFO "not producing messages blocked %d", prev->pid);
+		//}
 		prev->ghost.blocked_task = false;
 		//ghost_task_blocked(rq, prev);
 		//ghost_wake_agent_of(prev);
@@ -1592,11 +1608,22 @@ static struct task_struct *pick_next_task_ghost(struct rq *rq)
 	// TODO: call into our code to pick next task
 	for (p = ghost_agents; p; p = p->next) {
 	//	ktime_get_real_ts64(&step11);
-		pid_ret = cpu_deliver_msg_pnt(rq, p);
-	//	ktime_get_real_ts64(&step15);
-		if (pid_ret > 0) {
-			//printk(KERN_INFO "got %d from pnt, cpu %d\n", pid_ret, rq->cpu);
-			next = find_task_by_pid_ns(pid_ret, &init_pid_ns);
+		// It's possible that we can return a task from pnt that can't
+		// be found for some reason I can't figure out. Just give an
+		// error back to the scheduler and let it try again until
+		// it has nothing to schedule.
+		do {
+			pid_ret = cpu_deliver_msg_pnt(rq, p);
+			if (pid_ret > 0) {
+				//printk(KERN_INFO "got %d from pnt, cpu %d\n", pid_ret, rq->cpu);
+				next = find_task_by_pid_ns(pid_ret, &init_pid_ns);
+				if (next) {
+					goto done;
+				} else {
+					//printk(KERN_INFO "unable to find process %d\n", pid_ret);
+					cpu_deliver_msg_pnt_err(rq, pid_ret, 1, p);
+					//pid_ret = cpu_deliver_msg_pnt(rq, p);
+				}
 			//printk(KERN_INFO "about to lock task rq\n");
 			//if (unlikely(task_cpu(next) != rq->cpu)) {
 			//	struct rq *old_rq;
@@ -1617,8 +1644,8 @@ static struct task_struct *pick_next_task_ghost(struct rq *rq)
 			//}
 			//rcu_read_unlock();
 	//		ktime_get_real_ts64(&step2);
-			goto done;
-		}
+			}
+		} while (pid_ret > 0);
 	}
 	//rcu_read_unlock();
 	//next = find_task_by_pid_ns(pid, &init_pid_ns);
@@ -1686,6 +1713,9 @@ done:
       	//////do_report_timing = false;
 	//}
 
+	if (next && next->state != 0) {
+		//printk(KERN_INFO "choosing task that is unrunnable %d, state %d\n", next->pid, next->state);
+	}
 	return next;
 }
 
@@ -5032,6 +5062,10 @@ static inline int __produce_for_task(struct ghost_agent_type *agent_type,
 		payload = &msg->pnt;
 		payload_size = sizeof(msg->pnt);
 		break;
+	case MSG_PNT_ERR:
+		payload = &msg->pnt_err;
+		payload_size = sizeof(msg->pnt_err);
+		break;
 	case MSG_TASK_SELECT_RQ:
 		payload = &msg->select;
 		payload_size = sizeof(msg->select);
@@ -5043,6 +5077,10 @@ static inline int __produce_for_task(struct ghost_agent_type *agent_type,
 	case MSG_BALANCE:
 		payload = &msg->balance;
 		payload_size = sizeof(msg->balance);
+		break;
+	case MSG_BALANCE_ERR:
+		payload = &msg->balance_err;
+		payload_size = sizeof(msg->balance_err);
 		break;
 	case MSG_REREGISTER_PREPARE:
 		payload = &msg->rereg_prep;
@@ -5124,6 +5162,7 @@ static void migrate_task_rq_ghost(struct task_struct *p, int new_cpu) {
 	payload->new_cpu = new_cpu;
 	produce_for_task(p, &msg);
 	p->ghost.twi.wake_up_cpu = new_cpu;
+	p->ghost.twi.valid = 1;
 }
 
 static int select_task_rq_ghost(struct task_struct *p, int cpu, int wake_flags)
@@ -5169,10 +5208,13 @@ static int select_task_rq_ghost(struct task_struct *p, int cpu, int wake_flags)
 	//else
 	msg.type = MSG_TASK_SELECT_RQ;
 	payload->pid = p->pid;
+	payload->waker_cpu = waker_cpu;
+	payload->prev_cpu = cpu;
 	produce_for_task(p, &msg);
 	new_cpu = payload->ret_cpu;
 	//task_rq_unlock(rq, p, &rf);
 	p->ghost.twi.wake_up_cpu = new_cpu;
+	p->ghost.twi.valid = 1;
 
 	p->ghost.twi.waker_cpu = waker_cpu;
 	p->ghost.twi.last_ran_cpu = task_cpu(p);
@@ -5189,6 +5231,23 @@ static int select_task_rq_ghost(struct task_struct *p, int cpu, int wake_flags)
 	return p->ghost.twi.wake_up_cpu;
 }
 
+static inline void cpu_deliver_msg_balance_err(struct rq *rq,
+					int pid,
+					int err,
+				      struct ghost_agent_type *agent_type)
+{
+	struct bpf_ghost_msg msg;
+	struct ghost_msg_payload_balance_err *payload;
+	int ret;
+	memset(&msg, 0, sizeof(msg));
+	payload = &msg.balance_err;
+	msg.type = MSG_BALANCE_ERR;
+	payload->cpu = cpu_of(rq);
+	payload->pid = pid;
+	payload->err = err;
+	produce_for_agent_type(agent_type, &msg);
+}
+
 static int balance_ghost(struct rq *rq, struct task_struct *prev,
 			 struct rq_flags *rf)
 {
@@ -5200,6 +5259,7 @@ static int balance_ghost(struct rq *rq, struct task_struct *prev,
 	//struct timespec64 start;
 	//struct timespec64 end;
 	//ktime_get_real_ts64(&start);
+	int ret;
 	memset(&msg, 0, sizeof(msg));
 
 	msg.type = MSG_BALANCE;
@@ -5210,7 +5270,10 @@ static int balance_ghost(struct rq *rq, struct task_struct *prev,
 	produce_for_task(prev, &msg);
 	if (payload->do_move) {
 		move_pid = payload->move_pid;
-		ghost_run_pid_on(move_pid, 0, cpu_of(rq));
+		ret = ghost_run_pid_on(move_pid, 0, cpu_of(rq));
+		if (ret < 0) {
+			cpu_deliver_msg_balance_err(rq, move_pid, ret, prev->ghost.agent_type);
+		}
 	}
 	rq_repin_lock(rq, rf);
 	//ktime_get_real_ts64(&end);
@@ -5455,7 +5518,7 @@ static inline int __task_deliver_common(struct rq *rq, struct task_struct *p)
 	 * drained before any msg from its current incarnation is produced.
 	 */
 	if (p->inhibit_task_msgs) {
-		printk(KERN_INFO "inhibit");
+		//printk(KERN_INFO "inhibit");
 		return -1;
 	}
 
@@ -5487,6 +5550,11 @@ static void task_deliver_msg_task_new(struct rq *rq, struct task_struct *p,
 	payload->runnable = runnable;
 	payload->runtime = p->se.sum_exec_runtime;
 	payload->prio = p->prio;
+	if (p->ghost.twi.valid) {
+		payload->wake_up_cpu = p->ghost.twi.wake_up_cpu;
+	} else {
+		payload->wake_up_cpu = -1;
+	}
 	//if (_get_sw_info(p->ghost.enclave, p->ghost.status_word,
 	//		 &payload->sw_info)) {
 	//	WARN(1, "New task PID %d didn't have a status word!", p->pid);
@@ -5869,6 +5937,23 @@ static inline int cpu_deliver_msg_pnt(struct rq *rq,
 	}
 }
 
+static inline void cpu_deliver_msg_pnt_err(struct rq *rq,
+					int pid,
+					int err,
+				      struct ghost_agent_type *agent_type)
+{
+	struct bpf_ghost_msg msg;
+	struct ghost_msg_payload_pnt_err *payload;
+	int ret;
+	memset(&msg, 0, sizeof(msg));
+	payload = &msg.pnt_err;
+	msg.type = MSG_PNT_ERR;
+	payload->cpu = cpu_of(rq);
+	payload->pid = pid;
+	payload->err = err;
+	produce_for_agent_type(agent_type, &msg);
+}
+
 static void release_from_ghost(struct rq *rq, struct task_struct *p)
 {
 	//struct ghost_enclave *e = p->ghost.enclave;
@@ -6034,6 +6119,7 @@ static void task_dead_ghost(struct task_struct *p)
 	struct rq_flags rf;
 	struct rq *rq;
 	struct callback_head *head;
+	//printk(KERN_INFO "task dead %d\n", p->pid);
 
 	WARN_ON_ONCE(preemptible());
 
@@ -6509,7 +6595,7 @@ SYSCALL_DEFINE5(ghost_run, s64, gtid, u32, agent_barrier,
 		if (same_process(agent, current)) {
 			/* "serialize" with remote-agent doing a local run */
 			agent_barrier_inc(rq);
-			schedule_agent(rq, true);
+			//schedule_agent(rq, true);
 		} else {
 			error = -EINVAL;
 		}
@@ -6604,16 +6690,18 @@ static int __ghost_run_pid_on(uint64_t pid, int run_flags,
 				    0;
 
 	WARN_ON_ONCE(preemptible());
-	//printk(KERN_INFO "rebalancing");
+	//printk(KERN_INFO "rebalancing %d 1", pid);
 
 	if (cpu < 0)
 		return -EINVAL;
 	if (cpu >= nr_cpu_ids || !cpu_online(cpu))
 		return -ERANGE;
 
+	//printk(KERN_INFO "rebalancing %d 1.0", pid);
 	if (!run_flags_valid(run_flags, supported_flags, gtid))
 		return -EINVAL;
 
+	//printk(KERN_INFO "rebalancing %d 1.1", pid);
 	//if (check_caller_enclave &&
 	//    !check_same_enclave(smp_processor_id(), cpu)) {
 	//	return -EXDEV;
@@ -6621,19 +6709,22 @@ static int __ghost_run_pid_on(uint64_t pid, int run_flags,
 
 	//rcu_read_lock();
 	next = find_task_by_pid_ns(pid, &init_pid_ns);
+	//printk(KERN_INFO "rebalancing %d 1.2", pid);
 	this_rq = cpu_rq(cpu);
 	//old_rq = cpu_rq(old_cpu);
-	old_rq = task_rq(next);
+	//printk(KERN_INFO "rebalancing %d 2", pid);
 	//next = find_task_by_gtid(gtid);
 	if (next == NULL) {
 		printk(KERN_INFO "next null, pid %d", pid);
 		rcu_read_unlock();
 		return -ENOENT;
 	}
+	old_rq = task_rq(next);
 	if (cpu_of(old_rq) == cpu) {
 		// Already running on the correct CPU
 		return 0;
 	}
+	//printk(KERN_INFO "rebalancing %d 3", pid);
 	double_lock_balance(this_rq, old_rq);
 	//rq = task_rq(next);
 	//rcu_read_unlock();
@@ -6645,6 +6736,7 @@ static int __ghost_run_pid_on(uint64_t pid, int run_flags,
 		//task_rq_unlock(rq, next, &rf);
 		return err;
 	}
+	//printk(KERN_INFO "rebalancing %d 4", pid);
 
 	if (task_running(old_rq, next)) {
 		printk(KERN_INFO "next running");
@@ -6654,9 +6746,11 @@ static int __ghost_run_pid_on(uint64_t pid, int run_flags,
 	}
 
 	//printk(KERN_INFO "actually moving tasks");
+	//printk(KERN_INFO "rebalancing %d 5", pid);
 	deactivate_task(old_rq, next, 0);
 	set_task_cpu(next, cpu);
 	activate_task(this_rq, next, 0);
+	//printk(KERN_INFO "rebalancing %d 6", pid);
 	//rq = ghost_move_task(rq, next, cpu, &rf);
 
 	/*
@@ -6675,6 +6769,7 @@ static int __ghost_run_pid_on(uint64_t pid, int run_flags,
 		//task_rq_unlock(rq, next, &rf);
 		return -ESTALE;
 	}
+	//printk(KERN_INFO "rebalancing %d 7", pid);
 
 	/*
 	 * If the RQ is in the middle of PNT (where it briefly unlocks),
@@ -6695,6 +6790,7 @@ static int __ghost_run_pid_on(uint64_t pid, int run_flags,
 	//task_rq_unlock(rq, next, &rf);
 	double_unlock_balance(this_rq, old_rq);
 	resched_curr(this_rq);
+	//printk(KERN_INFO "rebalancing %d 8", pid);
 
 	return 0;
 }

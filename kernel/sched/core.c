@@ -4427,6 +4427,8 @@ static inline void ghost_prepare_task_switch(struct rq *rq,
 		rq->ghost.check_prev_preemption = false;
 		ghost_task_preempted(rq, prev);
 		//ghost_wake_agent_of(prev);
+	//} else if (cpu_of(rq) == 0) {
+	//	printk(KERN_INFO "check_prev_preemption false prev %d", prev->pid);
 	}
 
 done:
@@ -5365,6 +5367,9 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 
 #ifdef CONFIG_SCHED_CLASS_GHOST
 	rq->ghost.check_prev_preemption = ghost_produce_prev_msgs(rq, prev);
+	//if (do_report_timing == 100000 && cpu_of(rq) == 0) {
+	//	printk("setting check_prev_preemption %d for %d", rq->ghost.check_prev_preemption, prev->pid);
+	//}
 
 	/* a negative 'switchto_count' indicates end of the chain */
 	rq->ghost.switchto_count = -rq->ghost.switchto_count;
@@ -5384,6 +5389,7 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 	 * higher scheduling class, because otherwise those lose the
 	 * opportunity to pull in more work from other CPUs.
 	 */
+	if (do_report_timing != 100000) {
 	if (likely(prev->sched_class <= &fair_sched_class &&
 		   rq->nr_running == rq->cfs.h_nr_running)) {
 
@@ -5398,6 +5404,7 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 		}
 
 		goto out_return;
+	}
 	}
 
 restart:
@@ -5678,7 +5685,7 @@ static void __sched notrace __schedule(bool preempt)
 	////	report_timing += 1;
       	//////do_report_timing = false;
 	//}
-	do_report_timing += 1;
+	//do_report_timing += 1;
 }
 
 void __noreturn do_task_dead(void)

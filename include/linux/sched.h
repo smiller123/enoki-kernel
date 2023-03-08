@@ -646,6 +646,7 @@ struct sched_ghost_entity {
 		int last_ran_cpu;
 		int wake_up_cpu;
 		int waker_cpu;
+		int valid;
 	} twi;	/* twi = task_wakeup_info */
 
 	struct list_head task_list;
