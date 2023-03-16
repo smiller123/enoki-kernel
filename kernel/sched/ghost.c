@@ -5267,14 +5267,16 @@ static int balance_ghost(struct rq *rq, struct task_struct *prev,
 	//payload->gtid = gtid(p);
 	rq_unpin_lock(rq, rf);
 
-	produce_for_task(prev, &msg);
-	if (payload->do_move) {
-		move_pid = payload->move_pid;
-		ret = ghost_run_pid_on(move_pid, 0, cpu_of(rq));
-		if (ret < 0) {
-			cpu_deliver_msg_balance_err(rq, move_pid, ret, prev->ghost.agent_type);
+	do {
+		produce_for_task(prev, &msg);
+		if (payload->do_move) {
+			move_pid = payload->move_pid;
+			ret = ghost_run_pid_on(move_pid, 0, cpu_of(rq));
+			if (ret < 0) {
+				cpu_deliver_msg_balance_err(rq, move_pid, ret, prev->ghost.agent_type);
+			}
 		}
-	}
+	} while (payload->do_move);
 	rq_repin_lock(rq, rf);
 	//ktime_get_real_ts64(&end);
 	//if (do_report_timing % 10000 == 0) {
@@ -5868,6 +5870,7 @@ static inline int cpu_deliver_msg_pnt(struct rq *rq,
 	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
 	struct bpf_ghost_msg msg;
 	struct ghost_msg_payload_pnt *payload;
+	struct task_struct *curr = rq->curr;
 	//struct timespec64 start;
 	//struct timespec64 end;
 	int ret;
@@ -5888,6 +5891,13 @@ static inline int cpu_deliver_msg_pnt(struct rq *rq,
 	//rcu_read_unlock();
 	msg.type = MSG_PNT;
 	payload->cpu = cpu_of(rq);
+	if (!curr || !task_has_ghost_policy(curr) || !task_on_rq_queued(curr)) {
+		payload->is_curr = false;
+	} else {
+		payload->is_curr = true;
+		payload->curr_pid = curr->pid;
+		payload->curr_runtime = curr->se.sum_exec_runtime;
+	}
 	//ktime_get_real_ts64(&step1);
 
 	//rcu_read_lock();
