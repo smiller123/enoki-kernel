@@ -2076,6 +2076,7 @@ static void __queue_free_work(struct work_struct *work)
 {
 	struct ghost_agent_type *agent;
 	struct bpf_ghost_msg msg;
+	struct ghost_msg_payload_unreg_queue *unreg_q_payload;
 	struct ghost_queue *q = container_of(work, struct ghost_queue,
 					     free_work);
 	struct ghost_agent_type **agent_ptr = find_ghost_agent(q->policy);
@@ -2086,8 +2087,10 @@ static void __queue_free_work(struct work_struct *work)
 	//struct ghost_msg_payload_unreg_q *unreg_q_payload;
 	memset(&msg, 0, sizeof(msg));
 	//msg_size_payload = &msg.msg_size;
+	unreg_q_payload = &msg.unreg_queue;
 
 	msg.type = MSG_UNREGISTER_QUEUE;
+	unreg_q_payload->id = q->id;
 
 	produce_for_agent_type(agent, &msg);
 	vfree(q->addr);
@@ -2099,6 +2102,7 @@ static void __reverse_queue_free_work(struct work_struct *work)
 {
 	struct ghost_agent_type *agent;
 	struct bpf_ghost_msg msg;
+	struct ghost_msg_payload_unreg_queue *unreg_q_payload;
 	struct ghost_queue *q = container_of(work, struct ghost_queue,
 					     free_work);
 	struct ghost_agent_type **agent_ptr = find_ghost_agent(q->policy);
@@ -2109,8 +2113,10 @@ static void __reverse_queue_free_work(struct work_struct *work)
 	//struct ghost_msg_payload_unreg_q *unreg_q_payload;
 	memset(&msg, 0, sizeof(msg));
 	//msg_size_payload = &msg.msg_size;
+	unreg_q_payload = &msg.unreg_rev_queue;
 
 	msg.type = MSG_UNREGISTER_REV_QUEUE;
+	unreg_q_payload->id = q->id;
 
 	produce_for_agent_type(agent, &msg);
 	vfree(q->addr);
@@ -3544,6 +3550,7 @@ int bento_enter_queue(int policy,
 
 	msg.type = MSG_ENTER_QUEUE;
 	enter_q_payload->entries = enter_queue.entries;
+	enter_q_payload->id = enter_queue.id;
 
 	produce_for_agent_type(agent, &msg);
 	return 0;
@@ -3686,6 +3693,10 @@ int bento_create_queue(int policy,
 	msg2.type = MSG_CREATE_QUEUE;
 	msg_create_queue->q = q->addr;
 	produce_for_agent_type(agent, &msg2);
+	q->id = msg_create_queue->id;
+	error = put_user(msg_create_queue->id, &arg->id);
+	if (error)
+		return error;
 
 	fd = anon_inode_getfd("[ghost_queue]", &queue_fops, q,
 			      O_RDWR | O_CLOEXEC);
@@ -3846,6 +3857,8 @@ int bento_create_reverse_queue(int policy,
 	msg2.type = MSG_CREATE_REV_QUEUE;
 	msg_create_queue->q = q->addr;
 	produce_for_agent_type(agent, &msg2);
+	q->id = msg_create_queue->id;
+	error = put_user(msg_create_queue->id, &arg->id);
 
 	fd = anon_inode_getfd("[ghost_queue]", &queue_fops, q,
 			      O_RDWR | O_CLOEXEC);

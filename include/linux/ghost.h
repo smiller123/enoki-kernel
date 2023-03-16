@@ -126,6 +126,7 @@ struct ghost_queue {
 	//spinlock_t lock;
 	struct kref kref;
 	int policy;
+	int id;
 
 	//struct ghost_enclave *enclave;
 

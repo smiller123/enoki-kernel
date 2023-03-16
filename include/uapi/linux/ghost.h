@@ -119,10 +119,12 @@ struct bento_ioc_create_queue {
 	uint32_t elems;
 	uint32_t flags;
 	ulong mapsize;
+	int id;
 //	struct bento_ring_offsets offsets;
 };
 
 struct bento_ioc_enter_queue {
+	int id;
 	uint32_t entries;
 };
 
@@ -411,6 +413,9 @@ struct ghost_msg_payload_timer {
 
 struct ghost_msg_payload_pnt {
 	int cpu;
+	bool is_curr;
+	uint64_t curr_pid;
+	uint64_t curr_runtime;
 	bool pick_task;
 	uint64_t ret_pid;
 };
@@ -468,13 +473,16 @@ struct ghost_msg_payload_send_hint {
 
 struct ghost_msg_payload_create_queue {
 	void *q;
+	int id;
 };
 
 struct ghost_msg_payload_enter_queue {
+	int id;
 	uint32_t entries;
 };
 
 struct ghost_msg_payload_unreg_queue {
+	int id;
 	uint32_t entries;
 };
 
