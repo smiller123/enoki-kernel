@@ -483,7 +483,6 @@ struct ghost_msg_payload_enter_queue {
 
 struct ghost_msg_payload_unreg_queue {
 	int id;
-	uint32_t entries;
 };
 
 struct ghost_msg_payload_cleanup {

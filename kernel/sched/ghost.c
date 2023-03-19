@@ -87,6 +87,7 @@ static void task_deliver_msg_departed(struct rq *rq, struct task_struct *p);
 static void task_deliver_msg_wakeup(struct rq *rq, struct task_struct *p);
 static void task_deliver_msg_latched(struct rq *rq, struct task_struct *p,
 				     bool latched_preempt);
+int do_balance(struct rq *rq, struct ghost_agent_type *agent_type, struct rq_flags *rf);
 static int balance_ghost(struct rq *rq, struct task_struct *prev,
 			 struct rq_flags *rf);
 static void migrate_task_rq_ghost(struct task_struct *p, int new_cpu);
@@ -1184,12 +1185,13 @@ static int validate_next_task(struct rq *rq, struct task_struct *next,
 	 * Task departed, but the agent hasn't yet processed the
 	 * TASK_DEPARTED message.
 	 */
-	if (next->inhibit_task_msgs) {
-		set_txn_state(state, GHOST_TXN_TARGET_STALE);
-		return -EINVAL;
-	}
+	//if (next->inhibit_task_msgs) {
+	//	set_txn_state(state, GHOST_TXN_TARGET_STALE);
+	//	return -EINVAL;
+	//}
 
 	if (!task_has_ghost_policy(next)) {
+		printk(KERN_INFO "no ghost policy");
 		set_txn_state(state, GHOST_TXN_INVALID_TARGET);
 		return -EINVAL;
 	}
@@ -1201,6 +1203,7 @@ static int validate_next_task(struct rq *rq, struct task_struct *next,
 	 * TASK_DEAD msg so treat this as a stale barrier.
 	 */
 	if (unlikely(task_is_dead(rq, next))) {
+		printk(KERN_INFO "task dead");
 		set_txn_state(state, GHOST_TXN_TARGET_STALE);
 		return -ESTALE;
 	}
@@ -1211,6 +1214,7 @@ static int validate_next_task(struct rq *rq, struct task_struct *next,
 	//}
 
 	if (!task_on_rq_queued(next)) {
+		printk(KERN_INFO "not queued");
 		set_txn_state(state, GHOST_TXN_TARGET_NOT_RUNNABLE);
 		return -EINVAL;
 	}
@@ -1603,6 +1607,7 @@ static struct task_struct *pick_next_task_ghost(struct rq *rq)
 	//	goto done;
 	//}
 
+again:
 	//rcu_read_lock();
 	//ktime_get_real_ts64(&step1);
 	// TODO: call into our code to pick next task
@@ -1677,6 +1682,14 @@ static struct task_struct *pick_next_task_ghost(struct rq *rq)
 			next = prev;
 			rq->ghost.check_prev_preemption = false;
 			goto done;
+		}
+	}
+	if (!next) {
+		for (p = ghost_agents; p; p = p->next) {
+			struct rq_flags rf;
+			int moved = do_balance(rq, p, &rf);
+			if (moved)
+				goto again;
 		}
 	}
 
@@ -5163,6 +5176,21 @@ static inline int produce_for_task(struct task_struct *p,
 	return __produce_for_task(p->ghost.agent_type, msg, task_barrier_get(p), true);
 }
 
+static void fake_migrate_task_rq_ghost(struct task_struct *p, int new_cpu) {
+	struct rq *rq = task_rq(p);
+	struct bpf_ghost_msg msg;
+	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	struct ghost_msg_payload_migrate_task_rq *payload = &msg.migrate;
+	memset(&msg, 0, sizeof(msg));
+
+	msg.type = MSG_TASK_MIGRATE_RQ;
+	payload->pid = p->pid;
+	payload->new_cpu = new_cpu;
+	produce_for_task(p, &msg);
+	//p->ghost.twi.wake_up_cpu = new_cpu;
+	p->ghost.twi.valid = 1;
+}
+
 static void migrate_task_rq_ghost(struct task_struct *p, int new_cpu) {
 	struct rq *rq = task_rq(p);
 	struct bpf_ghost_msg msg;
@@ -5261,36 +5289,67 @@ static inline void cpu_deliver_msg_balance_err(struct rq *rq,
 	produce_for_agent_type(agent_type, &msg);
 }
 
-static int balance_ghost(struct rq *rq, struct task_struct *prev,
-			 struct rq_flags *rf)
-{
-
+int do_balance(struct rq *rq, struct ghost_agent_type *agent_type, struct rq_flags *rf) {
 	struct bpf_ghost_msg msg;
-	//struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
 	struct ghost_msg_payload_balance *payload = &msg.balance;
 	uint64_t move_pid;
-	//struct timespec64 start;
-	//struct timespec64 end;
-	//ktime_get_real_ts64(&start);
-	int ret;
 	memset(&msg, 0, sizeof(msg));
-
 	msg.type = MSG_BALANCE;
 	payload->cpu = cpu_of(rq);
 	//payload->gtid = gtid(p);
 	rq_unpin_lock(rq, rf);
+	int moved = 0;
 
 	do {
-		produce_for_task(prev, &msg);
+		produce_for_agent_type(agent_type, &msg);
 		if (payload->do_move) {
+			int ret;
 			move_pid = payload->move_pid;
 			ret = ghost_run_pid_on(move_pid, 0, cpu_of(rq));
 			if (ret < 0) {
-				cpu_deliver_msg_balance_err(rq, move_pid, ret, prev->ghost.agent_type);
+				cpu_deliver_msg_balance_err(rq, move_pid, ret, agent_type);
+			} else {
+				moved += 1;
 			}
 		}
 	} while (payload->do_move);
 	rq_repin_lock(rq, rf);
+	return moved;
+}
+
+static int balance_ghost(struct rq *rq, struct task_struct *prev,
+			 struct rq_flags *rf)
+{
+
+	do_balance(rq, prev->ghost.agent_type, rf);
+	//return do_balance(rq, prev->ghost.agent_type, rf);
+	//printk(KERN_INFO "balance for cpu %d", cpu_of(rq));
+	//struct bpf_ghost_msg msg;
+	//////struct bpf_ghost_msg *msg = &per_cpu(bpf_ghost_msg, cpu_of(rq));
+	//struct ghost_msg_payload_balance *payload = &msg.balance;
+	//uint64_t move_pid;
+	//////struct timespec64 start;
+	//////struct timespec64 end;
+	//////ktime_get_real_ts64(&start);
+	//int ret;
+	//memset(&msg, 0, sizeof(msg));
+
+	//msg.type = MSG_BALANCE;
+	//payload->cpu = cpu_of(rq);
+	//////payload->gtid = gtid(p);
+	//rq_unpin_lock(rq, rf);
+
+	//do {
+	//	produce_for_task(prev, &msg);
+	//	if (payload->do_move) {
+	//		move_pid = payload->move_pid;
+	//		ret = ghost_run_pid_on(move_pid, 0, cpu_of(rq));
+	//		if (ret < 0) {
+	//			cpu_deliver_msg_balance_err(rq, move_pid, ret, prev->ghost.agent_type);
+	//		}
+	//	}
+	//} while (payload->do_move);
+	//rq_repin_lock(rq, rf);
 	//ktime_get_real_ts64(&end);
 	//if (do_report_timing % 10000 == 0) {
 	//	struct timespec64 diff = timespec64_sub(end, start);
@@ -5302,7 +5361,7 @@ static int balance_ghost(struct rq *rq, struct task_struct *prev,
 	//struct task_struct *agent = rq->ghost.agent;
 
 	//if (!agent || !agent->on_rq)
-		return 0;
+	//	return 0;
 
 	/*
 	 * Try to commit a ready txn iff:
@@ -5333,6 +5392,7 @@ static int balance_ghost(struct rq *rq, struct task_struct *prev,
 	// * sched_class became runnable while the rq->lock was dropped.
 	// */
 	//return rq->ghost.latched_task || rq_adj_nr_running(rq);
+	return rq_adj_nr_running(rq);
 }
 
 //static inline int produce_for_agent(struct rq *rq,
@@ -6733,13 +6793,12 @@ static int __ghost_run_pid_on(uint64_t pid, int run_flags,
 	//rcu_read_lock();
 	next = find_task_by_pid_ns(pid, &init_pid_ns);
 	//printk(KERN_INFO "rebalancing %d 1.2", pid);
-	this_rq = cpu_rq(cpu);
 	//old_rq = cpu_rq(old_cpu);
 	//printk(KERN_INFO "rebalancing %d 2", pid);
 	//next = find_task_by_gtid(gtid);
 	if (next == NULL) {
 		printk(KERN_INFO "next null, pid %d", pid);
-		rcu_read_unlock();
+		//rcu_read_unlock();
 		return -ENOENT;
 	}
 	old_rq = task_rq(next);
@@ -6747,6 +6806,7 @@ static int __ghost_run_pid_on(uint64_t pid, int run_flags,
 		// Already running on the correct CPU
 		return 0;
 	}
+	this_rq = cpu_rq(cpu);
 	//printk(KERN_INFO "rebalancing %d 3", pid);
 	double_lock_balance(this_rq, old_rq);
 	//rq = task_rq(next);
@@ -6762,7 +6822,7 @@ static int __ghost_run_pid_on(uint64_t pid, int run_flags,
 	//printk(KERN_INFO "rebalancing %d 4", pid);
 
 	if (task_running(old_rq, next)) {
-		printk(KERN_INFO "next running");
+		//printk(KERN_INFO "next running");
 		double_unlock_balance(this_rq, old_rq);
 		//task_rq_unlock(rq, next, &rf);
 		return -EBUSY;
@@ -6771,6 +6831,7 @@ static int __ghost_run_pid_on(uint64_t pid, int run_flags,
 	//printk(KERN_INFO "actually moving tasks");
 	//printk(KERN_INFO "rebalancing %d 5", pid);
 	deactivate_task(old_rq, next, 0);
+	//fake_migrate_task_rq_ghost(next, cpu);
 	set_task_cpu(next, cpu);
 	activate_task(this_rq, next, 0);
 	//printk(KERN_INFO "rebalancing %d 6", pid);
@@ -6785,13 +6846,13 @@ static int __ghost_run_pid_on(uint64_t pid, int run_flags,
 	//	return -EINVAL;
 	//}
 
-	if ((run_flags & DO_NOT_PREEMPT) &&
-	    (task_has_ghost_policy(this_rq->curr) || this_rq->ghost.latched_task)) {
-		printk(KERN_INFO "no preempt and policy");
-		double_unlock_balance(this_rq, old_rq);
-		//task_rq_unlock(rq, next, &rf);
-		return -ESTALE;
-	}
+	//if ((run_flags & DO_NOT_PREEMPT) &&
+	//    (task_has_ghost_policy(this_rq->curr) || this_rq->ghost.latched_task)) {
+	//	printk(KERN_INFO "no preempt and policy");
+	//	double_unlock_balance(this_rq, old_rq);
+	//	//task_rq_unlock(rq, next, &rf);
+	//	return -ESTALE;
+	//}
 	//printk(KERN_INFO "rebalancing %d 7", pid);
 
 	/*
