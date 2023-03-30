@@ -316,12 +316,15 @@ int reregister_ghost_agent(const void *agent, int policy, const void* process_me
 		if (policy == (*tmp)->policy) {
 			//printk(KERN_INFO "found policy\n");
 			//struct bpf_ghost_msg *msg = kzalloc(sizeof(struct bpf_ghost_msg), GFP_KERNEL);
+			//struct timespec64 start;
+			//struct timespec64 end;
 			struct bpf_ghost_msg msg;
 			memset(&msg, 0, sizeof(msg));
 			//printk(KERN_INFO "kzalloc\n");
 			struct ghost_msg_payload_rereg_prep *prep_payload = &msg.rereg_prep;
 			struct ghost_msg_payload_rereg_init *init_payload = &msg.rereg_init;
 			void *data;
+			//ktime_get_real_ts64(&start);
 			write_lock(&(*tmp)->agent_lock);
 			//printk(KERN_INFO "policy locked\n");
 
@@ -342,8 +345,12 @@ int reregister_ghost_agent(const void *agent, int policy, const void* process_me
 
 			//agent->next = NULL;
 			write_unlock(&(*tmp)->agent_lock);
+			//ktime_get_real_ts64(&end);
 			write_unlock(&ghost_agents_lock);
 			synchronize_rcu();
+			//struct timespec64 diff = timespec64_sub(end, start);
+			//s64 ns_diff = timespec64_to_ns(&diff);
+			//printk(KERN_INFO "reregister took %d\n", ns_diff);
 			return 0;
 		}
 		tmp = &(*tmp)->next;
@@ -365,6 +372,7 @@ int file_write_deferred(char *buf)
 		// should probably lock on this queue
 		//char *buf = "hello\n";
 		//char *start = (char *)(*p)->record_queue->addr;
+		spin_lock(&top_record_queue->lock);
 		char *start = (char *)top_record_queue->addr;
 		struct ghost_queue_header *header = (struct ghost_queue_header *)start;
 		uint32_t index = header->head & (header->nelems - 1);
@@ -373,6 +381,7 @@ int file_write_deferred(char *buf)
 		char *item = start + (index * 256);
 		strscpy(item, buf, strlen(buf));
 		header->head += 1;
+		spin_unlock(&top_record_queue->lock);
 	}
 		//if ((*p)->record_file) {
 			//char *buf = "";
@@ -2143,7 +2152,9 @@ static void __record_free_work(struct work_struct *work)
 					     free_work);
 	struct ghost_agent_type **agent_ptr = find_ghost_agent(q->policy);
 	struct ghost_agent_type *agent = *agent_ptr;
-	agent->record_queue = NULL;
+	if (agent) {
+		agent->record_queue = NULL;
+	}
 	vfree(q->addr);
 	kfree(q);
 }
@@ -3937,7 +3948,8 @@ int bento_create_top_record(
 	//	    ((typeof(((struct ghost_ring *)0)->head))~0UL)
 	//);
 
-	if (elems > GHOST_MAX_QUEUE_ELEMS || !is_power_of_2(elems))
+	//if (elems > GHOST_MAX_QUEUE_ELEMS || !is_power_of_2(elems))
+	if (!is_power_of_2(elems))
 		return -EINVAL;
 	//printk(KERN_INFO "create_queue 5");
 
@@ -3967,7 +3979,7 @@ int bento_create_top_record(
 	}
 
 	//printk(KERN_INFO "create_queue 8");
-	//spin_lock_init(&q->lock);
+	spin_lock_init(&q->lock);
 	kref_init(&q->kref); /* sets to 1; inode gets its own reference */
 	q->addr = vmalloc_user(size);
 	//q->addr = vmalloc_user_node_flags(size, node, GFP_KERNEL);
@@ -5964,7 +5976,8 @@ static inline int cpu_deliver_msg_pnt(struct rq *rq,
 	//rcu_read_unlock();
 	msg.type = MSG_PNT;
 	payload->cpu = cpu_of(rq);
-	if (!curr || !task_has_ghost_policy(curr) || !task_on_rq_queued(curr)) {
+	//if (!curr || !task_has_ghost_policy(curr) || !task_on_rq_queued(curr)) {
+	if (!curr || !task_has_ghost_policy(curr)) {
 		payload->is_curr = false;
 	} else {
 		payload->is_curr = true;
@@ -6797,7 +6810,7 @@ static int __ghost_run_pid_on(uint64_t pid, int run_flags,
 	//printk(KERN_INFO "rebalancing %d 2", pid);
 	//next = find_task_by_gtid(gtid);
 	if (next == NULL) {
-		printk(KERN_INFO "next null, pid %d", pid);
+		//printk(KERN_INFO "next null, pid %d", pid);
 		//rcu_read_unlock();
 		return -ENOENT;
 	}
@@ -6814,7 +6827,7 @@ static int __ghost_run_pid_on(uint64_t pid, int run_flags,
 
 	err = validate_next_task(this_rq, next, /*state=*/ NULL);
 	if (err) {
-		printk(KERN_INFO "bad validate task");
+		//printk(KERN_INFO "bad validate task");
 		double_unlock_balance(this_rq, old_rq);
 		//task_rq_unlock(rq, next, &rf);
 		return err;

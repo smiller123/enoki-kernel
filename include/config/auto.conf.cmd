@@ -1371,7 +1371,7 @@ endif
 ifneq "$(KBUILD_DEFCONFIG)" "x86_64_defconfig"
 include/config/auto.conf: FORCE
 endif
-ifneq "$(CC_VERSION_TEXT)" "gcc (Ubuntu 9.4.0-1ubuntu1~20.04.1) 9.4.0"
+ifneq "$(CC_VERSION_TEXT)" "gcc (Ubuntu 7.5.0-3ubuntu1~18.04) 7.5.0"
 include/config/auto.conf: FORCE
 endif
 ifneq "$(srctree)" "."

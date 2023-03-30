@@ -6352,20 +6352,20 @@ static void __setscheduler_params(struct task_struct *p,
 		return;
 	}
 #endif
-//
-//	if (dl_policy(policy))
-//		__setparam_dl(p, attr);
-//	else if (fair_policy(policy))
-//		p->static_prio = NICE_TO_PRIO(attr->sched_nice);
-//
-//	/*
-//	 * __sched_setscheduler() ensures attr->sched_priority == 0 when
-//	 * !rt_policy. Always setting this ensures that things like
-//	 * getparam()/getattr() don't report silly values for !rt tasks.
-//	 */
-//	p->rt_priority = attr->sched_priority;
-//	p->normal_prio = normal_prio(p);
-//	set_load_weight(p, true);
+
+	if (dl_policy(policy))
+		__setparam_dl(p, attr);
+	else if (fair_policy(policy))
+		p->static_prio = NICE_TO_PRIO(attr->sched_nice);
+
+	/*
+	 * __sched_setscheduler() ensures attr->sched_priority == 0 when
+	 * !rt_policy. Always setting this ensures that things like
+	 * getparam()/getattr() don't report silly values for !rt tasks.
+	 */
+	p->rt_priority = attr->sched_priority;
+	p->normal_prio = normal_prio(p);
+	set_load_weight(p, true);
 }
 
 /* Actually do priority change: must hold pi & rq lock. */
@@ -6381,14 +6381,14 @@ static void __setscheduler(struct rq *rq, struct task_struct *p,
 
 	__setscheduler_params(p, attr);
 
-//	/*
-//	 * Keep a potential priority boosting if called from
-//	 * sched_setscheduler().
-//	 */
-//	p->prio = normal_prio(p);
-//	if (keep_boost)
-//		p->prio = rt_effective_prio(p, p->prio);
-//
+	/*
+	 * Keep a potential priority boosting if called from
+	 * sched_setscheduler().
+	 */
+	p->prio = normal_prio(p);
+	if (keep_boost)
+		p->prio = rt_effective_prio(p, p->prio);
+
 #ifdef CONFIG_SCHED_CLASS_GHOST
 	if (ghost_policy(attr->sched_policy)) {
 		//printk(KERN_INFO "setting sched policy");
@@ -6396,13 +6396,13 @@ static void __setscheduler(struct rq *rq, struct task_struct *p,
 		return;
 	}
 #endif
-//
-//	if (dl_prio(p->prio))
-//		p->sched_class = &dl_sched_class;
-//	else if (rt_prio(p->prio))
-//		p->sched_class = &rt_sched_class;
-//	else
-//		p->sched_class = &fair_sched_class;
+
+	if (dl_prio(p->prio))
+		p->sched_class = &dl_sched_class;
+	else if (rt_prio(p->prio))
+		p->sched_class = &rt_sched_class;
+	else
+		p->sched_class = &fair_sched_class;
 }
 
 /*

@@ -123,7 +123,7 @@ struct ghost_queue {
 	 *
 	 *  See go/ghost-queue-change for more details.
 	 */
-	//spinlock_t lock;
+	spinlock_t lock;
 	struct kref kref;
 	int policy;
 	int id;
