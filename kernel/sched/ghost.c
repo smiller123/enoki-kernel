@@ -822,6 +822,7 @@ static void update_curr_ghost(struct rq *rq)
 
 static void prio_changed_ghost(struct rq *rq, struct task_struct *p, int old)
 {
+	printk(KERN_INFO "prio changed ghost");
 	/*
 	 * XXX produce MSG_TASK_PRIO_CHANGE into p->ghost.dst_q.
 	 */
@@ -867,6 +868,8 @@ static void switched_to_ghost(struct rq *rq, struct task_struct *p)
 		 * possible opportunity.
 		 */
 		//VM_BUG_ON(p->ghost.new_task);
+		p->ghost.twi.wake_up_cpu = cpu_of(rq);
+		p->ghost.twi.valid = 1;
 		p->ghost.new_task = true;  /* see ghost_prepare_task_switch() */
 		//ghost_task_new(rq, p);
 	}
@@ -5632,7 +5635,7 @@ static void task_deliver_msg_task_new(struct rq *rq, struct task_struct *p,
 
 	msg.type = MSG_TASK_NEW;
 	//payload->gtid = gtid(p);
-	//printk(KERN_INFO "new task pid %d prio %d weight %d inv weight %d static prio %d normal prio %d\n", p->pid, p->prio, p->se.load.weight, p->se.load.inv_weight, p->static_prio, p->normal_prio);
+	printk(KERN_INFO "new task pid %d prio %d weight %d inv weight %d static prio %d normal prio %d\n", p->pid, p->prio, p->se.load.weight, p->se.load.inv_weight, p->static_prio, p->normal_prio);
 	payload->pid = p->pid;
 	payload->runnable = runnable;
 	payload->runtime = p->se.sum_exec_runtime;
