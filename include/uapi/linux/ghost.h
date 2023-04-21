@@ -474,6 +474,7 @@ struct ghost_msg_payload_send_hint {
 
 struct ghost_msg_payload_create_queue {
 	void *q;
+	uint64_t pid;
 	int id;
 };
 

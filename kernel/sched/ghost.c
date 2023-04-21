@@ -1157,6 +1157,9 @@ static void task_tick_ghost(struct rq *rq, struct task_struct *p, int queued)
 
 	__update_curr_ghost(rq, false);
 
+	if (queued) {
+		rq->ghost.must_resched = true;
+	}
 	cpu_deliver_msg_tick(rq, p, queued);
 	//	ghost_wake_agent_on(agent_target_cpu(rq));
 }
@@ -3719,6 +3722,7 @@ int bento_create_queue(int policy,
 	msg_create_queue = &msg2.create_queue;
 
 	msg2.type = MSG_CREATE_QUEUE;
+	msg_create_queue->pid = current->pid;
 	msg_create_queue->q = q->addr;
 	produce_for_agent_type(agent, &msg2);
 	q->id = msg_create_queue->id;
@@ -3883,6 +3887,7 @@ int bento_create_reverse_queue(int policy,
 	msg_create_queue = &msg2.create_rev_queue;
 
 	msg2.type = MSG_CREATE_REV_QUEUE;
+	msg_create_queue->pid = current->pid;
 	msg_create_queue->q = q->addr;
 	produce_for_agent_type(agent, &msg2);
 	q->id = msg_create_queue->id;
