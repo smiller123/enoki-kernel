@@ -1810,6 +1810,7 @@ static void yield_task_ghost(struct rq *rq)
 	 * possible.
 	 */
 	WARN_ON_ONCE(curr->ghost.yield_task);
+	rq->ghost.must_resched = true;
 	curr->ghost.yield_task = true;
 	ghost_task_yield(rq, curr);
 }
@@ -5635,8 +5636,9 @@ static void task_deliver_msg_task_new(struct rq *rq, struct task_struct *p,
 
 	msg.type = MSG_TASK_NEW;
 	//payload->gtid = gtid(p);
-	printk(KERN_INFO "new task pid %d prio %d weight %d inv weight %d static prio %d normal prio %d\n", p->pid, p->prio, p->se.load.weight, p->se.load.inv_weight, p->static_prio, p->normal_prio);
+	//printk(KERN_INFO "new task pid %d prio %d weight %d inv weight %d static prio %d normal prio %d\n", p->pid, p->prio, p->se.load.weight, p->se.load.inv_weight, p->static_prio, p->normal_prio);
 	payload->pid = p->pid;
+	payload->tgid = p->tgid;
 	payload->runnable = runnable;
 	payload->runtime = p->se.sum_exec_runtime;
 	payload->prio = p->prio;

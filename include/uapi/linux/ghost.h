@@ -307,6 +307,7 @@ enum {
 /* TODO: Move payload to header once all clients updated. */
 struct ghost_msg_payload_task_new {
 	uint64_t pid;
+	uint64_t tgid;
 	uint64_t runtime;	/* cumulative runtime in ns */
 	uint16_t runnable;
 	int prio;
