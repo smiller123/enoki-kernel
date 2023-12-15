@@ -2072,7 +2072,7 @@ static __latent_entropy struct task_struct *copy_process(
 
 	retval = perf_event_init_task(p);
 	if (retval)
-		goto bad_fork_cleanup_sched;
+		goto bad_fork_cleanup_policy;
 	retval = audit_alloc(p);
 	if (retval)
 		goto bad_fork_cleanup_perf;
@@ -2317,14 +2317,6 @@ static __latent_entropy struct task_struct *copy_process(
 
 	copy_oom_score_adj(clone_flags, p);
 
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	p->gtid = ghost_alloc_gtid(p);
-	//if (ghost_class(p->sched_class))
-		//ghost_initialize_status_word(p);
-	WARN_ON_ONCE(p->inhibit_task_msgs);
-	WARN_ON_ONCE(!list_empty(&p->inhibited_task_list));
-#endif
-
 	return p;
 
 bad_fork_cancel_cgroup:
@@ -2368,8 +2360,6 @@ bad_fork_cleanup_audit:
 	audit_free(p);
 bad_fork_cleanup_perf:
 	perf_event_free_task(p);
-bad_fork_cleanup_sched:
-	sched_cleanup_fork(p);
 bad_fork_cleanup_policy:
 	lockdep_free_task(p);
 #ifdef CONFIG_NUMA

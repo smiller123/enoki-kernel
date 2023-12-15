@@ -593,20 +593,12 @@ struct sched_dl_entity {
 };
 
 #ifdef CONFIG_SCHED_CLASS_GHOST
-//struct ghost_queue;
-//struct ghost_status_word;
-//struct ghost_enclave;
-struct timerfd_ghost;
-
 struct sched_ghost_entity {
 	struct list_head run_list;
 	ktime_t last_runnable_at;
 
 	/* The following fields are protected by 'task_rq(p)->lock' */
-	//struct ghost_queue *dst_q;
-	//struct ghost_status_word *status_word;
-	//struct ghost_enclave *enclave;
-	struct ghost_agent_type *agent_type;
+	struct enoki_sched_type *agent_type;
 
 	/*
 	 * See also ghost_prepare_task_switch() and ghost_deferred_msgs()
@@ -652,9 +644,6 @@ struct sched_ghost_entity {
 	struct list_head task_list;
 	struct rcu_head rcu;
 };
-
-//extern void ghost_commit_greedy_txn(void);
-extern void ghost_timerfd_triggered(struct timerfd_ghost *timer);
 
 #endif
 
@@ -776,9 +765,7 @@ struct task_struct {
 	struct sched_entity		se;
 	struct sched_rt_entity		rt;
 #ifdef CONFIG_SCHED_CLASS_GHOST
-	int64_t gtid;			/* ghost tid */
-	uint inhibit_task_msgs;		/* don't produce msgs for this task */
-	struct list_head inhibited_task_list;
+	int64_t gtid;
 	struct sched_ghost_entity ghost;
 #endif
 #ifdef CONFIG_CGROUP_SCHED
@@ -1467,14 +1454,6 @@ struct task_struct {
 	 */
 };
 
-#define bpf_ghost_sched_kern bpf_ghost_sched
-#define bpf_ghost_msg_kern bpf_ghost_msg
-
-struct bpf_prog;
-union bpf_attr;
-extern int ghost_bpf_link_attach(const union bpf_attr *attr,
-				 struct bpf_prog *prog);
-
 static inline struct pid *task_pid(struct task_struct *task)
 {
 	return task->thread_pid;
@@ -1902,7 +1881,6 @@ static __always_inline void scheduler_ipi(void)
 	 */
 	if (is_idle_task(current))
 		rcu_irq_enter();
-	//ghost_commit_greedy_txn();
 	if (is_idle_task(current))
 		rcu_irq_exit();
 #endif

@@ -354,11 +354,9 @@
 #define __NR_faccessat2 439
 #define __NR_process_madvise 440
 #define __NR_epoll_pwait2 441
-#define __NR_ghost_run 450
-#define __NR_ghost 451
 
 #ifdef __KERNEL__
-#define __NR_syscall_max 451
+#define __NR_syscall_max 441
 #endif
 
 #endif /* _ASM_X86_UNISTD_64_H */

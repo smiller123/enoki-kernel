@@ -25,13 +25,6 @@
 // NOLINTBEGIN
 
 /*
- * The version of ghOSt. It is important that the kernel and the userspace
- * process are the same version as each other. Each successive version changes
- * values in this header file, assumptions about operations in the kernel, etc.
- */
-#define GHOST_VERSION	55
-
-/*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
  * via the proper channels (i.e. the official <sched.h> uapi header file).
  */
@@ -39,214 +32,37 @@
 #define SCHED_GHOST		18
 #endif
 
-/*
- * This is userspace API so the usual suspects like __cacheline_aligned
- * will not work.
- *
- * TODO: these are architecture-specific.
- */
-#define __ghost_cacheline_aligned	__attribute__((__aligned__(64)))
-#define __ghost_page_aligned		__attribute__((__aligned__(4096)))
-
-enum ghost_type {
-	GHOST_AGENT,
-	GHOST_TASK,
-};
-
-enum {
-	GHOST_SCHED_TASK_PRIO,
-	GHOST_SCHED_AGENT_PRIO,
-	GHOST_SCHED_MAX_PRIO,
-};
-
-/*
- * Collateral for GHOST_CONFIG_QUEUE_WAKEUP op:
- * - kernel supports up to 'GHOST_MAX_WINFO' wakeup targets for a queue.
- * - 'prio' must be zero (intended to be a tiebreaker but not defined yet).
- */
-#define GHOST_MAX_WINFO	2
-struct ghost_agent_wakeup {
-	int cpu;
-	int prio;
-};
-
-/*
- * <type,arg> tuple decoding:
- * 'type' is GHOST_TASK	 -> 'arg' is <gtid>
- * 'type' is GHOST_AGENT -> 'arg' is <cpu>
- */
-struct ghost_msg_src {
-	enum ghost_type type;
-	uint64_t arg;
-};
-#define GHOST_THIS_CPU	-1
-
-/* GHOST_TIMERFD_SETTIME */
-struct timerfd_ghost {
-	int cpu;
-	int flags;
-	uint64_t cookie;
-};
-#define TIMERFD_GHOST_ENABLED	(1 << 0)
-
-struct ghost_sw_info {
-	uint32_t id;		/* status_word region id */
-	uint32_t index;		/* index into the status_word array */
-};
-
-struct ghost_ioc_sw_get_info {
-	struct ghost_msg_src request;
-	struct ghost_sw_info response;
-};
-
-//struct ghost_ioc_create_queue {
-//	int elems;
-//	int node;
-//	int flags;
-//	ulong mapsize;
-//};
-
-//struct bento_ring_offsets {
-//	uint32_t head;
-//	uint32_t tail;
-//	uint32_t ring_mask;
-//	uint32_t flags;
-//	uint32_t dropped;
-//	uint32_t array;
-//};
-
-struct bento_ioc_create_queue {
+struct enoki_ioc_create_queue {
 	uint32_t elems;
 	uint32_t flags;
 	ulong mapsize;
 	int id;
-//	struct bento_ring_offsets offsets;
 };
 
-struct bento_ioc_enter_queue {
+struct enoki_ioc_enter_queue {
 	int id;
 	uint32_t entries;
 };
 
-struct ghost_ioc_assoc_queue {
-	int fd;
-	struct ghost_msg_src src;
-	int barrier;
-	int flags;
-	int status;
-};
-
-struct ghost_ioc_set_default_queue {
-	int fd;
-};
-
-struct ghost_ioc_config_queue_wakeup {
-	int qfd;
-	struct ghost_agent_wakeup *w;
-	int ninfo;
-	int flags;
-};
-
-struct ghost_ioc_get_cpu_time {
-	int64_t gtid;
-	uint64_t runtime;
-};
-
-struct ghost_ioc_commit_txn {
-#ifdef __KERNEL__
-	ulong *mask_ptr;
-#else
-	cpu_set_t *mask_ptr;
-#endif
-	uint32_t mask_len;
-	int flags;
-};
-
-struct ghost_ioc_timerfd_settime {
-	int timerfd;
-	int flags;
-#ifdef __KERNEL__
-	struct __kernel_itimerspec *in_tmr;
-	struct __kernel_itimerspec *out_tmr;
-#else
-	struct itimerspec *in_tmr;
-	struct itimerspec *out_tmr;
-#endif
-	struct timerfd_ghost timerfd_ghost;
-};
-
-#define GHOST_IOC_NULL			_IO('g', 0)
-#define GHOST_IOC_SW_GET_INFO		_IOWR('g', 1, struct ghost_ioc_sw_get_info)
-#define GHOST_IOC_SW_FREE		_IOW('g', 2, struct ghost_sw_info)
-#define GHOST_IOC_CREATE_QUEUE		_IOWR('g', 3, struct bento_ioc_create_queue)
-#define GHOST_IOC_ASSOC_QUEUE		_IOWR('g', 4, struct ghost_ioc_assoc_queue)
-#define GHOST_IOC_SET_DEFAULT_QUEUE	_IOW('g', 5, struct ghost_ioc_set_default_queue)
-#define GHOST_IOC_CONFIG_QUEUE_WAKEUP	_IOW('g', 6, struct ghost_ioc_config_queue_wakeup)
-#define GHOST_IOC_GET_CPU_TIME		_IOWR('g', 7, struct ghost_ioc_get_cpu_time)
-#define GHOST_IOC_COMMIT_TXN		_IOW('g', 8, struct ghost_ioc_commit_txn)
-#define GHOST_IOC_SYNC_GROUP_TXN	_IOW('g', 9, struct ghost_ioc_commit_txn)
-#define GHOST_IOC_TIMERFD_SETTIME	_IOWR('g', 10, struct ghost_ioc_timerfd_settime)
-#define GHOST_IOC_ENTER_QUEUE		_IOWR('g', 11, struct bento_ioc_enter_queue)
-#define GHOST_IOC_CREATE_RECORD		_IOWR('g', 12, struct bento_ioc_create_queue)
-#define EKIBEN_IOC_SEND_HINT		_IOWR('g', 13, const void __user *)
-#define GHOST_IOC_CREATE_REV_QUEUE	_IOWR('g', 14, struct bento_ioc_create_queue)
-
-/*
- * Status word region APIs.
- */
-struct ghost_sw_region_header {
-	uint32_t version;	/* ABI version */
-	uint32_t id;		/* region id */
-	uint32_t numa_node;
-	uint32_t start;		/* offset of the first status word */
-	uint32_t capacity;	/* total status words in this region */
-	uint32_t available;	/* free status words in this region */
-} __ghost_cacheline_aligned;
-#define GHOST_SW_REGION_VERSION	0
-
-/*
- * Align status words up to the next power of two so we do not cross cache lines
- * unnecessarily.  At our current size, that is one cache line per status word,
- * and two status words per cache line.
- */
-//struct ghost_status_word {
-//	uint32_t barrier;
-//	uint32_t flags;
-//	uint64_t gtid;
-//	int64_t switch_time;	/* time at which task was context-switched onto CPU */
-//	uint64_t runtime;	/* total time spent on the CPU in nsecs */
-//} __attribute__((__aligned__(32)));
-
-#define GHOST_SW_F_INUSE	(1U << 0)    /* status_word in use */
-#define GHOST_SW_F_CANFREE	(1U << 1)    /* status_word can be freed */
-#define GHOST_SW_F_ALLOCATED	(1U << 2)    /* status_word is allocated */
-
-/* agent-specific status_word.flags */
-#define GHOST_SW_CPU_AVAIL	(1U << 8)    /* CPU available hint */
-#define GHOST_SW_BOOST_PRIO     (1U << 9)    /* agent with boosted prio */
-
-/* task-specific status_word.flags */
-#define GHOST_SW_TASK_ONCPU	(1U << 16)   /* task is oncpu */
-#define GHOST_SW_TASK_RUNNABLE	(1U << 17)   /* task is runnable */
-#define GHOST_SW_TASK_IS_AGENT  (1U << 18)
-#define GHOST_SW_TASK_MSG_GATED (1U << 19)   /* all task msgs are gated until
-					      * status_word is freed by agent */
+#define ENOKI_IOC_NULL			_IO('g', 0)
+#define ENOKI_IOC_CREATE_QUEUE		_IOWR('g', 3, struct enoki_ioc_create_queue)
+#define ENOKI_IOC_ENTER_QUEUE		_IOWR('g', 11, struct enoki_ioc_enter_queue)
+#define ENOKI_IOC_CREATE_RECORD		_IOWR('g', 12, struct enoki_ioc_create_queue)
+#define ENOKI_IOC_SEND_HINT		_IOWR('g', 13, const void __user *)
+#define ENOKI_IOC_CREATE_REV_QUEUE	_IOWR('g', 14, struct enoki_ioc_create_queue)
 
 /*
  * Queue APIs.
  */
-struct ghost_queue_header {
-//	uint32_t version;	/* ABI version */
-//	uint32_t start;		/* offset from the header to start of ring */
+struct enoki_queue_header {
 	uint32_t offset;
-	uint32_t nelems;	/* power-of-2 size of ghost_ring.msgs[] */
+	uint32_t nelems;	/* power-of-2 size of msgs */
 	uint32_t head;
 	uint32_t tail;
 };
-//} __ghost_cacheline_aligned;
 #define GHOST_QUEUE_VERSION	0
 
-struct ghost_msg {
+struct enoki_msg {
 	uint16_t type;		/* message type */
 	uint16_t length;	/* length of this message including payload */
 	uint32_t seqnum;	/* sequence number for this msg source */
@@ -263,7 +79,7 @@ struct ghost_msg {
 #define _MSG_CPU_FIRST	128
 #define _MSG_CPU_LAST	(_MSG_CPU_FIRST + 64 - 1)
 
-/* ghost message types */
+/* message types */
 enum {
 	/* misc msgs */
 	MSG_NOP			= 0,
@@ -304,19 +120,16 @@ enum {
 	MSG_CLEANUP,
 };
 
-/* TODO: Move payload to header once all clients updated. */
-struct ghost_msg_payload_task_new {
+struct enoki_msg_payload_task_new {
 	uint64_t pid;
 	uint64_t tgid;
 	uint64_t runtime;	/* cumulative runtime in ns */
 	uint16_t runnable;
 	int prio;
 	int wake_up_cpu;
-	struct ghost_sw_info sw_info;
 };
 
-struct ghost_msg_payload_task_preempt {
-	//uint64_t gtid;
+struct enoki_msg_payload_task_preempt {
 	uint64_t pid;
 	uint64_t runtime;	/* cumulative runtime in ns */
 	uint64_t cpu_seqnum;	/* cpu sequence number */
@@ -326,7 +139,7 @@ struct ghost_msg_payload_task_preempt {
 	char was_latched;
 };
 
-struct ghost_msg_payload_task_yield {
+struct enoki_msg_payload_task_yield {
 	uint64_t pid;
 	uint64_t runtime;	/* cumulative runtime in ns */
 	uint64_t cpu_seqnum;
@@ -335,8 +148,7 @@ struct ghost_msg_payload_task_yield {
 	char from_switchto;
 };
 
-struct ghost_msg_payload_task_blocked {
-	//uint64_t gtid;
+struct enoki_msg_payload_task_blocked {
 	uint64_t pid;
 	uint64_t runtime;	/* cumulative runtime in ns */
 	uint64_t cpu_seqnum;
@@ -344,11 +156,11 @@ struct ghost_msg_payload_task_blocked {
 	char from_switchto;
 };
 
-struct ghost_msg_payload_task_dead {
+struct enoki_msg_payload_task_dead {
 	uint64_t pid;
 };
 
-struct ghost_msg_payload_task_departed {
+struct enoki_msg_payload_task_departed {
 	uint64_t pid;
 	uint64_t cpu_seqnum;
 	int cpu;
@@ -356,13 +168,12 @@ struct ghost_msg_payload_task_departed {
 	char was_current;
 };
 
-struct ghost_msg_payload_task_affinity_changed {
+struct enoki_msg_payload_task_affinity_changed {
 	uint64_t pid;
 	uint64_t cpumask;
 };
 
-struct ghost_msg_payload_task_wakeup {
-	//uint64_t gtid;
+struct enoki_msg_payload_task_wakeup {
 	uint64_t pid;
 	uint64_t agent_data;	/* used by bpf */
 	char deferrable;	/* bool: 0 or 1 */
@@ -382,14 +193,14 @@ struct ghost_msg_payload_task_wakeup {
 	int waker_cpu;		/* CPU of the waker task */
 };
 
-struct ghost_msg_payload_task_switchto {
+struct enoki_msg_payload_task_switchto {
 	uint64_t pid;
 	uint64_t runtime;	/* cumulative runtime in ns */
 	uint64_t cpu_seqnum;
 	int cpu;
 };
 
-struct ghost_msg_payload_task_latched {
+struct enoki_msg_payload_task_latched {
 	uint64_t pid;
 	uint64_t commit_time;
 	uint64_t cpu_seqnum;
@@ -397,22 +208,22 @@ struct ghost_msg_payload_task_latched {
 	char latched_preempt;
 };
 
-struct ghost_msg_payload_cpu_not_idle {
+struct enoki_msg_payload_cpu_not_idle {
 	int cpu;
 	uint64_t next_pid;
 };
 
-struct ghost_msg_payload_cpu_tick {
+struct enoki_msg_payload_cpu_tick {
 	int cpu;
 	int queued;
 };
 
-struct ghost_msg_payload_timer {
+struct enoki_msg_payload_timer {
 	int cpu;
 	uint64_t cookie;
 };
 
-struct ghost_msg_payload_pnt {
+struct enoki_msg_payload_pnt {
 	int cpu;
 	bool is_curr;
 	uint64_t curr_pid;
@@ -421,108 +232,108 @@ struct ghost_msg_payload_pnt {
 	uint64_t ret_pid;
 };
 
-struct ghost_msg_payload_pnt_err {
+struct enoki_msg_payload_pnt_err {
 	int cpu;
 	uint64_t pid;
 	int err;
 };
 
-struct ghost_msg_payload_balance_err {
+struct enoki_msg_payload_balance_err {
 	int cpu;
 	uint64_t pid;
 	int err;
 };
 
-struct ghost_msg_payload_select_task_rq {
+struct enoki_msg_payload_select_task_rq {
 	uint64_t pid;
 	int waker_cpu;
 	int prev_cpu;
 	int ret_cpu;
 };
 
-struct ghost_msg_payload_migrate_task_rq {
+struct enoki_msg_payload_migrate_task_rq {
 	uint64_t pid;
 	int new_cpu;
 };
 
-struct ghost_msg_payload_balance {
+struct enoki_msg_payload_balance {
 	int cpu;
 	bool do_move;
 	uint64_t move_pid;
 };
 
-struct ghost_msg_payload_task_prio_changed {
+struct enoki_msg_payload_task_prio_changed {
 	uint64_t pid;
 	int prio;
 };
 
-struct ghost_msg_payload_rereg_prep {
+struct enoki_msg_payload_rereg_prep {
 	void *data;
 };
 
-struct ghost_msg_payload_rereg_init {
+struct enoki_msg_payload_rereg_init {
 	void *data;
 };
 
-struct ghost_msg_payload_msg_size {
+struct enoki_msg_payload_msg_size {
 	uint32_t msg_size;
 };
 
-struct ghost_msg_payload_send_hint {
+struct enoki_msg_payload_send_hint {
 	void *arg;
 };
 
-struct ghost_msg_payload_create_queue {
+struct enoki_msg_payload_create_queue {
 	void *q;
 	uint64_t pid;
 	int id;
 };
 
-struct ghost_msg_payload_enter_queue {
+struct enoki_msg_payload_enter_queue {
 	int id;
 	uint32_t entries;
 };
 
-struct ghost_msg_payload_unreg_queue {
+struct enoki_msg_payload_unreg_queue {
 	int id;
 };
 
-struct ghost_msg_payload_cleanup {
+struct enoki_msg_payload_cleanup {
 	struct file *record_file;
 };
 
 struct bpf_ghost_msg {
 	union {
-		struct ghost_msg_payload_task_dead	dead;
-		struct ghost_msg_payload_task_blocked	blocked;
-		struct ghost_msg_payload_task_wakeup	wakeup;
-		struct ghost_msg_payload_task_new	newt;
-		struct ghost_msg_payload_task_preempt	preempt;
-		struct ghost_msg_payload_task_yield	yield;
-		struct ghost_msg_payload_task_departed	departed;
-		struct ghost_msg_payload_task_switchto	switchto;
-		struct ghost_msg_payload_task_affinity_changed	affinity;
-		struct ghost_msg_payload_task_latched	latched;
-		struct ghost_msg_payload_cpu_tick	cpu_tick;
-		struct ghost_msg_payload_timer		timer;
-		struct ghost_msg_payload_cpu_not_idle	cpu_not_idle;
-		struct ghost_msg_payload_pnt		pnt;
-		struct ghost_msg_payload_pnt_err	pnt_err;
-		struct ghost_msg_payload_select_task_rq select;
-		struct ghost_msg_payload_migrate_task_rq migrate;
-		struct ghost_msg_payload_balance	balance;
-		struct ghost_msg_payload_balance_err	balance_err;
-		struct ghost_msg_payload_task_prio_changed	prio_changed;
-		struct ghost_msg_payload_rereg_prep	rereg_prep;
-		struct ghost_msg_payload_rereg_init	rereg_init;
-		struct ghost_msg_payload_msg_size	msg_size;
-		struct ghost_msg_payload_send_hint	send_hint;
-		struct ghost_msg_payload_create_queue	create_queue;
-		struct ghost_msg_payload_create_queue	create_rev_queue;
-		struct ghost_msg_payload_enter_queue	enter_queue;
-		struct ghost_msg_payload_unreg_queue	unreg_queue;
-		struct ghost_msg_payload_unreg_queue	unreg_rev_queue;
-		struct ghost_msg_payload_cleanup	cleanup;
+		struct enoki_msg_payload_task_dead	dead;
+		struct enoki_msg_payload_task_blocked	blocked;
+		struct enoki_msg_payload_task_wakeup	wakeup;
+		struct enoki_msg_payload_task_new	newt;
+		struct enoki_msg_payload_task_preempt	preempt;
+		struct enoki_msg_payload_task_yield	yield;
+		struct enoki_msg_payload_task_departed	departed;
+		struct enoki_msg_payload_task_switchto	switchto;
+		struct enoki_msg_payload_task_affinity_changed	affinity;
+		struct enoki_msg_payload_task_latched	latched;
+		struct enoki_msg_payload_cpu_tick	cpu_tick;
+		struct enoki_msg_payload_timer		timer;
+		struct enoki_msg_payload_cpu_not_idle	cpu_not_idle;
+		struct enoki_msg_payload_pnt		pnt;
+		struct enoki_msg_payload_pnt_err	pnt_err;
+		struct enoki_msg_payload_select_task_rq select;
+		struct enoki_msg_payload_migrate_task_rq migrate;
+		struct enoki_msg_payload_balance	balance;
+		struct enoki_msg_payload_balance_err	balance_err;
+		struct enoki_msg_payload_task_prio_changed	prio_changed;
+		struct enoki_msg_payload_rereg_prep	rereg_prep;
+		struct enoki_msg_payload_rereg_init	rereg_init;
+		struct enoki_msg_payload_msg_size	msg_size;
+		struct enoki_msg_payload_send_hint	send_hint;
+		struct enoki_msg_payload_create_queue	create_queue;
+		struct enoki_msg_payload_create_queue	create_rev_queue;
+		struct enoki_msg_payload_enter_queue	enter_queue;
+		struct enoki_msg_payload_unreg_queue	unreg_queue;
+		struct enoki_msg_payload_unreg_queue	unreg_rev_queue;
+		struct enoki_msg_payload_cleanup	cleanup;
 	};
 	uint16_t type;
 	uint32_t seqnum;
@@ -535,7 +346,7 @@ typedef std::atomic<uint32_t> _ghost_ring_index_t;
 typedef volatile uint32_t _ghost_ring_index_t;
 #endif
 
-struct ghost_ring {
+struct enoki_ring {
 	/*
 	 * kernel produces at 'head & (nelems-1)' and
 	 * agent consumes from 'tail & (nelems-1)'.
@@ -543,10 +354,6 @@ struct ghost_ring {
 	 * kernel increments 'overflow' any time there aren't enough
 	 * free slots to produce a message.
 	 */
-	//_ghost_ring_index_t head;
-	//_ghost_ring_index_t tail;
-	//_ghost_ring_index_t overflow;
-	//struct ghost_msg msgs[0];  /* array of size 'header->nelems' */
 	void *msgs;
 	uint32_t nelems;
 	uint32_t head;
@@ -566,40 +373,6 @@ struct ghost_ring {
 #ifndef __NR_ghost
 #define __NR_ghost	451
 #endif
-
-/*
- * 'ops' supported by gsys_ghost().
- */
-enum ghost_ops {
-	GHOST_GTID_LOOKUP,
-};
-
-/*
- * 'ops' supported by gsys_ghost() that are used by the 'base' library in
- * userspace. Arbitrary applications may use the 'base' library requiring
- * these 'ops' to be immutable (both in terms of the entry-point and the
- * functionality).
- *
- * The 'base' library can detect support for a particular op as follows:
- * - return value 0 indicates that the 'op' was successful.
- * - return value of -1 indicates that 'op' was not successful:
- *   - ENOSYS: kernel does not support ghost.
- *   - EOPNOTSUPP: kernel supports ghost but doesn't recognize this op.
- *     (for e.g. newer binary running on an older kernel).
- *   - any other errno indicates an op-specific error.
- */
-enum ghost_base_ops {
-	_GHOST_BASE_OP_FIRST = 65536,	/* avoid overlap with 'ghost_ops' */
-	GHOST_BASE_GET_GTID = _GHOST_BASE_OP_FIRST,
-
-	/*
-	 * New ops must be added to the end of this enumeration.
-	 */
-};
-
-/* status flags for GHOST_ASSOCIATE_QUEUE */
-#define GHOST_ASSOC_SF_ALREADY		(1 << 0) /* Queue already set */
-#define GHOST_ASSOC_SF_BRAND_NEW	(1 << 1) /* TASK_NEW not sent yet */
 
 /* flags accepted by ghost_run() */
 #define RTLA_ON_PREEMPT	  (1 << 0)  /* Return To Local Agent on preemption */
@@ -640,94 +413,8 @@ enum ghost_base_ops {
 /* Union of all COMMIT_AT_XYZ flags */
 #define COMMIT_AT_FLAGS		(COMMIT_AT_SCHEDULE | COMMIT_AT_TXN_COMMIT)
 
-/* special 'gtid' encodings that can be passed to ghost_run() */
-#define GHOST_NULL_GTID		(0)
-#define GHOST_AGENT_GTID	(-1)
-#define GHOST_IDLE_GTID		(-2)
 
-/* ghost transaction */
 
-/*
- * (txn->state == GHOST_TXN_READY)		    transaction is ready
- * (txn->state >= 0 && txn->state < nr_cpu_ids)	    transaction is claimed
- * (txn->state < 0)				    transaction is committed
- */
-enum ghost_txn_state {
-	GHOST_TXN_COMPLETE		= INT_MIN,
-	GHOST_TXN_ABORTED,
-	GHOST_TXN_TARGET_ONCPU,
-	GHOST_TXN_TARGET_STALE,
-	GHOST_TXN_TARGET_NOT_FOUND,
-	GHOST_TXN_TARGET_NOT_RUNNABLE,
-	GHOST_TXN_AGENT_STALE,
-	GHOST_TXN_CPU_OFFLINE,
-	GHOST_TXN_CPU_UNAVAIL,
-	GHOST_TXN_INVALID_FLAGS,
-	GHOST_TXN_INVALID_TARGET,
-	GHOST_TXN_NOT_PERMITTED,
-	GHOST_TXN_INVALID_CPU,
-	GHOST_TXN_NO_AGENT,
-	GHOST_TXN_UNSUPPORTED_VERSION,
-	GHOST_TXN_POISONED,
-
-	/*
-	 * Values [0-nr_cpu_ids) indicates that the transaction is claimed
-	 * by the specific CPU.
-	 */
-
-	GHOST_TXN_READY			= INT_MAX,
-};
-
-/*
- * _ghost_txn_state_t is not expected to be used anywhere except as the type
- * of ghost_txn::state below. See cl/350179823 as an example of unintentional
- * consequences.
- */
-#ifdef __cplusplus
-#include <atomic>
-typedef std::atomic<ghost_txn_state> _ghost_txn_state_t;
-/*
- * To be safe, check that the size of '_ghost_txn_state_t' is equal to the size
- * of 'int32_t', which is the size that the kernel assumes the state is.
- */
-static_assert(sizeof(_ghost_txn_state_t) == sizeof(int32_t));
-typedef std::atomic<int32_t> _ghost_txn_owner_t;
-#else
-typedef int32_t _ghost_txn_state_t;
-typedef int32_t _ghost_txn_owner_t;
-#endif
-
-struct ghost_txn {
-	int32_t version;
-	int32_t cpu;		/* readonly-after-init */
-	_ghost_txn_state_t state;
-	uint32_t agent_barrier;
-	uint32_t task_barrier;
-	uint16_t run_flags;
-	uint8_t commit_flags;
-	uint8_t unused;
-	int64_t gtid;
-	int64_t commit_time;	/* the time that the txn commit succeeded/failed */
-	uint64_t cpu_seqnum;
-	/*
-	 * Context-dependent fields.
-	 */
-	union {
-		/* only used during a sync-group commit */
-		_ghost_txn_owner_t sync_group_owner;
-	} u;
-} __ghost_cacheline_aligned;
-
-struct ghost_cpu_data {
-	struct ghost_txn	txn;
-} __ghost_page_aligned;
-
-#define GHOST_TXN_VERSION	0
-
-/* GHOST_GTID_LOOKUP */
-enum {
-	GHOST_GTID_LOOKUP_TGID,		/* return group_leader pid */
-};
 
 /*
  * ghost tids referring to normal tasks always have a positive value:

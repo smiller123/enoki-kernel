@@ -28,10 +28,6 @@
 #include <linux/rcupdate.h>
 #include <linux/time_namespace.h>
 
-#ifdef CONFIG_SCHED_CLASS_GHOST
-#include <linux/ghost.h>
-#include <linux/sched.h>
-#endif
 
 struct timerfd_ctx {
 	union {
@@ -49,9 +45,6 @@ struct timerfd_ctx {
 	struct list_head clist;
 	spinlock_t cancel_lock;
 	bool might_cancel;
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	struct timerfd_ghost timerfd_ghost;
-#endif
 };
 
 static LIST_HEAD(cancel_list);
@@ -63,12 +56,6 @@ static inline bool isalarm(struct timerfd_ctx *ctx)
 		ctx->clockid == CLOCK_BOOTTIME_ALARM;
 }
 
-#ifdef CONFIG_SCHED_CLASS_GHOST
-//static inline bool timerfd_ghost_enabled(struct timerfd_ghost *timerfd_ghost)
-//{
-//	return timerfd_ghost->flags & TIMERFD_GHOST_ENABLED;
-//}
-#endif
 
 /*
  * This gets called when the timer event triggers. We set the "expired"
@@ -79,26 +66,12 @@ static void timerfd_triggered(struct timerfd_ctx *ctx)
 {
 	unsigned long flags;
 
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	struct timerfd_ghost timerfd_ghost = {
-		.flags = 0,	/* disabled */
-	};
-#endif
-
 	spin_lock_irqsave(&ctx->wqh.lock, flags);
 	ctx->expired = 1;
 	ctx->ticks++;
 	wake_up_locked_poll(&ctx->wqh, EPOLLIN);
-#ifdef CONFIG_SCHED_CLASS_GHOST
-//	if (unlikely(timerfd_ghost_enabled(&ctx->timerfd_ghost)))
-//		timerfd_ghost = ctx->timerfd_ghost;
-#endif
 	spin_unlock_irqrestore(&ctx->wqh.lock, flags);
 
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	//if (unlikely(timerfd_ghost_enabled(&timerfd_ghost)))
-	//	ghost_timerfd_triggered(&timerfd_ghost);
-#endif
 }
 
 static enum hrtimer_restart timerfd_tmrproc(struct hrtimer *htmr)
@@ -465,14 +438,9 @@ SYSCALL_DEFINE2(timerfd_create, int, clockid, int, flags)
 	return ufd;
 }
 
-#ifdef CONFIG_SCHED_CLASS_GHOST
-int do_timerfd_settime(int ufd, int flags, const struct itimerspec64 *new,
-		       struct itimerspec64 *old, struct timerfd_ghost *tfdl)
-#else
 static int do_timerfd_settime(int ufd, int flags,
 		const struct itimerspec64 *new,
 		struct itimerspec64 *old)
-#endif
 {
 	struct fd f;
 	struct timerfd_ctx *ctx;
@@ -536,12 +504,6 @@ static int do_timerfd_settime(int ufd, int flags,
 	 * Re-program the timer to the new value ...
 	 */
 	ret = timerfd_setup(ctx, flags, new);
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	if (tfdl)
-		memcpy(&ctx->timerfd_ghost, tfdl, sizeof(struct timerfd_ghost));
-	else
-		ctx->timerfd_ghost.flags = 0;   /* disabled */
-#endif
 	spin_unlock_irq(&ctx->wqh.lock);
 	fdput(f);
 	return ret;
@@ -588,11 +550,7 @@ SYSCALL_DEFINE4(timerfd_settime, int, ufd, int, flags,
 
 	if (get_itimerspec64(&new, utmr))
 		return -EFAULT;
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	ret = do_timerfd_settime(ufd, flags, &new, &old, NULL);
-#else
 	ret = do_timerfd_settime(ufd, flags, &new, &old);
-#endif
 	if (ret)
 		return ret;
 	if (otmr && put_itimerspec64(&old, otmr))
@@ -620,11 +578,7 @@ SYSCALL_DEFINE4(timerfd_settime32, int, ufd, int, flags,
 
 	if (get_old_itimerspec32(&new, utmr))
 		return -EFAULT;
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	ret = do_timerfd_settime(ufd, flags, &new, &old, NULL);
-#else
 	ret = do_timerfd_settime(ufd, flags, &new, &old);
-#endif
 	if (ret)
 		return ret;
 	if (otmr && put_old_itimerspec32(&old, otmr))

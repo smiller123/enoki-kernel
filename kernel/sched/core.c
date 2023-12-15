@@ -10,7 +10,6 @@
 #include <trace/events/sched.h>
 #undef CREATE_TRACE_POINTS
 
-#include "ghost.h"
 #include "sched.h"
 
 #include <linux/nospec.h>
@@ -353,10 +352,6 @@ static enum hrtimer_restart hrtick(struct hrtimer *timer)
 	update_rq_clock(rq);
 	rq->curr->sched_class->task_tick(rq, rq->curr, 1);
 	rq_unlock(rq, &rf);
-
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	ghost_tick(rq);
-#endif
 
 	return HRTIMER_NORESTART;
 }
@@ -1697,20 +1692,6 @@ static inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 	p->sched_class->enqueue_task(rq, p, flags);
 }
 
-static inline void enqueue_task_fake(struct rq *rq, struct task_struct *p, int flags)
-{
-	//if (!(flags & ENQUEUE_NOCLOCK))
-	//	update_rq_clock(rq);
-
-	//if (!(flags & ENQUEUE_RESTORE)) {
-	//	sched_info_queued(rq, p);
-	//	psi_enqueue(p, flags & ENQUEUE_WAKEUP);
-	//}
-
-	//uclamp_rq_inc(rq, p);
-	//p->sched_class->enqueue_task(rq, p, flags);
-}
-
 static inline void dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 {
 	//struct timespec64 start;
@@ -1726,33 +1707,17 @@ static inline void dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 
 	uclamp_rq_dec(rq, p);
 	p->sched_class->dequeue_task(rq, p, flags);
-	//if (do_report_timing % 10000 == 0) {
-	//	ktime_get_real_ts64(&end);
-	//	struct timespec64 diff = timespec64_sub(end, start);
-	//	s64 ns_diff = timespec64_to_ns(&diff);
-	//	printk(KERN_INFO "dequeue diff %d\n", ns_diff);
-	//}
 }
 
 void activate_task(struct rq *rq, struct task_struct *p, int flags)
 {
-	//printk(KERN_INFO "activate task %p\n", p);
 	enqueue_task(rq, p, flags);
 
 	p->on_rq = TASK_ON_RQ_QUEUED;
 }
 
-void activate_task_fake(struct rq *rq, struct task_struct *p, int flags)
-{
-	//printk(KERN_INFO "activate task fake %d cpu %d\n", p->pid, cpu_of(rq));
-	enqueue_task_fake(rq, p, flags);
-
-	//p->on_rq = TASK_ON_RQ_QUEUED;
-}
-
 void deactivate_task(struct rq *rq, struct task_struct *p, int flags)
 {
-	//printk(KERN_INFO "deactivate task %p\n", p);
 	p->on_rq = (flags & DEQUEUE_SLEEP) ? 0 : TASK_ON_RQ_MIGRATING;
 
 	dequeue_task(rq, p, flags);
@@ -1844,20 +1809,6 @@ void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags)
 	} else if (p->sched_class > rq->curr->sched_class) {
 		resched_curr(rq);
 	}
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	//else if (&ghost_agent_sched_class > rq->curr->sched_class &&
-	//	 is_agent(rq, p)) {
-	//	/*
-	//	 * Normally, ghost threads have the lowest
-	//	 * priority. The ghost agent thread, however, is
-	//	 * allowed to run in the higher priority ghost
-	//	 * agent class when it would otherwise be
-	//	 * preempted by another sched_class. See
-	//	 * GHOST_SW_BOOST_PRIO for more details.
-	//	 */
-	//	resched_curr(rq);
-	//}
-#endif
 
 	/*
 	 * A queue event has occurred, and we're going to schedule.  In
@@ -1989,25 +1940,6 @@ static inline bool is_cpu_allowed(struct task_struct *p, int cpu)
  * Returns (locked) new rq. Old rq's lock is released.
  */
 struct rq *move_queued_task(struct rq *rq, struct rq_flags *rf,
-			    struct task_struct *p, int new_cpu)
-{
-	lockdep_assert_held(&rq->lock);
-
-	deactivate_task(rq, p, DEQUEUE_NOCLOCK);
-	set_task_cpu(p, new_cpu);
-	rq_unlock(rq, rf);
-
-	rq = cpu_rq(new_cpu);
-
-	rq_lock(rq, rf);
-	BUG_ON(task_cpu(p) != new_cpu);
-	activate_task(rq, p, 0);
-	check_preempt_curr(rq, p, 0);
-
-	return rq;
-}
-
-struct rq *move_queued_task_fake(struct rq *rq, struct rq_flags *rf,
 			    struct task_struct *p, int new_cpu)
 {
 	lockdep_assert_held(&rq->lock);
@@ -2271,7 +2203,6 @@ __do_set_cpus_allowed(struct task_struct *p, const struct cpumask *new_mask, u32
 		 * holding rq->lock.
 		 */
 		lockdep_assert_held(&rq->lock);
-		//printk(KERN_INFO "set cpus allowed\n");
 		dequeue_task(rq, p, DEQUEUE_SAVE | DEQUEUE_NOCLOCK);
 	}
 	if (running)
@@ -2527,13 +2458,6 @@ static int __set_cpus_allowed_ptr(struct task_struct *p,
 	 * Must re-check here, to close a race against __kthread_bind(),
 	 * sched_setaffinity() is not guaranteed to observe the flag.
 	 */
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	/* ghost agents do not allow affinity manipulations. */
-	if (p->sched_class == &ghost_sched_class && p->ghost.agent) {
-		ret = -EINVAL;
-		goto out;
-	}
-#endif
 	if ((flags & SCA_CHECK) && (p->flags & PF_NO_SETAFFINITY)) {
 		ret = -EINVAL;
 		goto out;
@@ -2878,26 +2802,6 @@ void kick_process(struct task_struct *p)
 	cpu = task_cpu(p);
 	if ((cpu != smp_processor_id()) && task_curr(p))
 		smp_send_reschedule(cpu);
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	/*
-	 * When an agent is 'blocked_in_run' its 'task->state' is TASK_RUNNING
-	 * so it won't be "woken up" when a signal is delivered to it (see
-	 * signal_wake_up_state() for details). This in turn implies that
-	 * the signal handling is delayed until there is a scheduling edge
-	 * on the agent's CPU (see pick_agent() for details).
-	 *
-	 * Ensure timely signal handling by forcing a scheduling edge on
-	 * the agent's CPU.
-	 */
-	else if (unlikely(p->ghost.agent && signal_pending(p))) {
-		if (cpu == smp_processor_id()) {
-			set_tsk_need_resched(current);
-			set_preempt_need_resched();
-		} else {
-			resched_cpu_unlocked(cpu);
-		}
-	}
-#endif
 	preempt_enable();
 }
 EXPORT_SYMBOL_GPL(kick_process);
@@ -3379,8 +3283,9 @@ static void ttwu_queue(struct task_struct *p, int cpu, int wake_flags)
 	struct rq *rq = cpu_rq(cpu);
 	struct rq_flags rf;
 
-	if (ttwu_queue_wakelist(p, cpu, wake_flags))
+	if (ttwu_queue_wakelist(p, cpu, wake_flags)) {
 		return;
+	}
 
 	rq_lock(rq, &rf);
 	update_rq_clock(rq);
@@ -3546,8 +3451,9 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 	 */
 	raw_spin_lock_irqsave(&p->pi_lock, flags);
 	smp_mb__after_spinlock();
-	if (!(p->state & state))
+	if (!(p->state & state)) {
 		goto unlock;
+	}
 
 	trace_sched_waking(p);
 
@@ -3577,8 +3483,9 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 	 * A similar smb_rmb() lives in try_invoke_on_locked_down_task().
 	 */
 	smp_rmb();
-	if (READ_ONCE(p->on_rq) && ttwu_runnable(p, wake_flags))
+	if (READ_ONCE(p->on_rq) && ttwu_runnable(p, wake_flags)) {
 		goto unlock;
+	}
 
 #ifdef CONFIG_SMP
 	/*
@@ -3642,8 +3549,9 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 	 */
 	if (smp_load_acquire(&p->on_cpu) &&
 	    ttwu_queue_wakelist(p, task_cpu(p), wake_flags | WF_ON_CPU |
-				(deferrable_wakeup ? WF_DEFERRABLE_WAKEUP : 0)))
+				(deferrable_wakeup ? WF_DEFERRABLE_WAKEUP : 0))) {
 		goto unlock;
+	}
 
 	/*
 	 * If the owning (remote) CPU is still in the middle of schedule() with
@@ -3791,8 +3699,6 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->rt.on_list		= 0;
 
 #ifdef CONFIG_SCHED_CLASS_GHOST
-	p->inhibit_task_msgs = 0;
-	INIT_LIST_HEAD(&p->inhibited_task_list);
 	sched_ghost_entity_init(p);
 #endif
 
@@ -4024,14 +3930,6 @@ void sched_post_fork(struct task_struct *p)
 	uclamp_post_fork(p);
 }
 
-void sched_cleanup_fork(struct task_struct *p)
-{
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	if (task_has_ghost_policy(p))
-		ghost_sched_cleanup_fork(p);
-#endif
-}
-
 unsigned long to_ratio(u64 period, u64 runtime)
 {
 	if (runtime == RUNTIME_INF)
@@ -4097,12 +3995,6 @@ void wake_up_new_task(struct task_struct *p)
 	}
 #endif
 	task_rq_unlock(rq, p, &rf);
-	//if (do_report_timing % 10000 == 0) {
-	//	ktime_get_real_ts64(&end);
-	//	struct timespec64 diff = timespec64_sub(end, start);
-	//	s64 ns_diff = timespec64_to_ns(&diff);
-	//	printk(KERN_INFO "wakeup diff %d\n", ns_diff);
-	//}
 }
 
 #ifdef CONFIG_PREEMPT_NOTIFIERS
@@ -4357,30 +4249,7 @@ static inline void ghost_prepare_task_switch(struct rq *rq,
 					     struct task_struct *prev,
 					     struct task_struct *next)
 {
-	//struct ghost_status_word *agent_sw;
-
-	//if (rq->ghost.agent) {
-	//	/*
-	//	 * XXX pick_next_task_fair() can return 'rq->idle' via
-	//	 * core_tag_pick_next_matching_rendezvous().
-	//	*/
-	//	agent_sw = rq->ghost.agent->ghost.status_word;
-	//	if (!task_has_ghost_policy(next) && next != rq->idle) {
-	//		ghost_sw_clear_flag(agent_sw, GHOST_SW_CPU_AVAIL);
-	//		if (rq->ghost.run_flags & NEED_CPU_NOT_IDLE) {
-	//			rq->ghost.run_flags &= ~NEED_CPU_NOT_IDLE;
-	//			ghost_need_cpu_not_idle(rq, next, prev);
-	//		}
-	//	} else {
-	//		ghost_sw_set_flag(agent_sw, GHOST_SW_CPU_AVAIL);
-	//	}
-	//}
-
 	if (!task_has_ghost_policy(prev))
-		goto done;
-
-	/* Who watches the watchmen? */
-	if (prev == rq->ghost.agent)
 		goto done;
 
 	/*
@@ -4406,7 +4275,6 @@ static inline void ghost_prepare_task_switch(struct rq *rq,
 
 		prev->ghost.new_task = false;
 		ghost_task_new(rq, prev);
-		//ghost_wake_agent_of(prev);
 	}
 
 	/* If we're on the ghost.tasks list, then we're runnable. */
@@ -4423,23 +4291,9 @@ static inline void ghost_prepare_task_switch(struct rq *rq,
 	if (rq->ghost.check_prev_preemption) {
 		rq->ghost.check_prev_preemption = false;
 		ghost_task_preempted(rq, prev);
-		//ghost_wake_agent_of(prev);
-	//} else if (cpu_of(rq) == 0) {
-	//	printk(KERN_INFO "check_prev_preemption false prev %d", prev->pid);
 	}
 
 done:
-	/*
-	 * Clear the ONCPU bit after producing the task state change msg
-	 * (e.g. preempted). This guarantees that when a task is offcpu
-	 * its 'task_barrier' is stable.
-	 */
-	//if (task_has_ghost_policy(prev)) {
-	//	//struct ghost_status_word *prev_sw = prev->ghost.status_word;
-	//	WARN_ON_ONCE(!(prev_sw->flags & GHOST_SW_TASK_ONCPU));
-	//	ghost_sw_clear_flag(prev_sw, GHOST_SW_TASK_ONCPU);
-	//}
-
 	/*
 	 * CPU is switching to a non-ghost task while a task is latched.
 	 *
@@ -4453,9 +4307,7 @@ done:
 		 * there is 'latched_task' then 'next' could not have
 		 * been returned from pick_next_task_ghost().
 		 */
-		WARN_ON_ONCE(task_has_ghost_policy(next) &&
-			     !is_agent(rq, next));
-		//ghost_latched_task_preempted(rq);
+		WARN_ON_ONCE(task_has_ghost_policy(next));
 
 		/*
 		 * XXX the WARN above is susceptible to a false-negative
@@ -4466,7 +4318,7 @@ done:
 		 */
 	}
 
-	if (task_has_ghost_policy(next) && !is_agent(rq, next))
+	if (task_has_ghost_policy(next))
 		ghost_task_got_oncpu(rq, next);
 
 	/*
@@ -4617,10 +4469,6 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 
 void schedule_callback(struct rq *rq)
 {
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	//if (unlikely(ghost_need_rendezvous(rq)))
-	//	ghost_wait_for_rendezvous(rq);
-#endif
 }
 
 /**
@@ -4659,17 +4507,7 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	       struct task_struct *next, struct rq_flags *rf)
 {
 	struct rq *ret;
-	//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
-	//printk(KERN_INFO "context_switch rq %p\n", rq);
-	//printk(KERN_INFO "context_switch prev %p\n", prev);
-	//printk(KERN_INFO "context_switch next %p\n", next);
-	//printk(KERN_INFO "context_switch rf %p\n", rf);
-	//}
-	//struct timespec64 start;
-	//ktime_get_real_ts64(&start);
 	prepare_task_switch(rq, prev, next);
-	//struct timespec64 step1;
-	//ktime_get_real_ts64(&step1);
 
 	/*
 	 * For paravirt, this is coupled with an exit in switch_to to
@@ -4685,19 +4523,7 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	 * kernel ->   user   switch + mmdrop() active
 	 *   user ->   user   switch
 	 */
-	//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
-	//printk(KERN_INFO "context_switch 1 rq %p\n", rq);
-	//printk(KERN_INFO "context_switch 1 prev %p\n", prev);
-	//printk(KERN_INFO "context_switch 1 next %p\n", next);
-	//printk(KERN_INFO "context_switch 1 rf %p\n", rf);
-	//}
 	if (!next->mm) {                                // to kernel
-		//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
-		//printk(KERN_INFO "context_switch 2 rq %p\n", rq);
-		//printk(KERN_INFO "context_switch 2 prev %p\n", prev);
-		//printk(KERN_INFO "context_switch 2 next %p\n", next);
-		//printk(KERN_INFO "context_switch 2 rf %p\n", rf);
-		//}
 		enter_lazy_tlb(prev->active_mm, next);
 
 		next->active_mm = prev->active_mm;
@@ -4705,19 +4531,7 @@ context_switch(struct rq *rq, struct task_struct *prev,
 			mmgrab(prev->active_mm);
 		else
 			prev->active_mm = NULL;
-		//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
-		//printk(KERN_INFO "context_switch 3 rq %p\n", rq);
-		//printk(KERN_INFO "context_switch 3 prev %p\n", prev);
-		//printk(KERN_INFO "context_switch 3 next %p\n", next);
-		//printk(KERN_INFO "context_switch 3 rf %p\n", rf);
-		//}
 	} else {                                        // to user
-		//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
-		//printk(KERN_INFO "context_switch 4 rq %p\n", rq);
-		//printk(KERN_INFO "context_switch 4 prev %p\n", prev);
-		//printk(KERN_INFO "context_switch 4 next %p\n", next);
-		//printk(KERN_INFO "context_switch 4 rf %p\n", rf);
-		//}
 		membarrier_switch_mm(rq, prev->active_mm, next->mm);
 		/*
 		 * sys_membarrier() requires an smp_mb() between setting
@@ -4734,70 +4548,17 @@ context_switch(struct rq *rq, struct task_struct *prev,
 			rq->prev_mm = prev->active_mm;
 			prev->active_mm = NULL;
 		}
-		//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
-		//printk(KERN_INFO "context_switch 5 rq %p\n", rq);
-		//printk(KERN_INFO "context_switch 5 prev %p\n", prev);
-		//printk(KERN_INFO "context_switch 5 next %p\n", next);
-		//printk(KERN_INFO "context_switch 5 rf %p\n", rf);
-		//}
 	}
-	//struct timespec64 step2;
-	//ktime_get_real_ts64(&step2);
-	//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
-	//printk(KERN_INFO "context_switch 6 rq %p\n", rq);
-	//printk(KERN_INFO "context_switch 6 prev %p\n", prev);
-	//printk(KERN_INFO "context_switch 6 next %p\n", next);
-	//printk(KERN_INFO "context_switch 6 rf %p\n", rf);
-	//}
 
 	rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
 
 	prepare_lock_switch(rq, next, rf);
-	//struct timespec64 step21;
-	//ktime_get_real_ts64(&step21);
 
 	/* Here we just switch the register state and the stack. */
 	switch_to(prev, next, prev);
-	//struct timespec64 step22;
-	//ktime_get_real_ts64(&step22);
 	barrier();
-	//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
-	//printk(KERN_INFO "context_switch 7 rq %p\n", rq);
-	//printk(KERN_INFO "context_switch 7 prev %p\n", prev);
-	//printk(KERN_INFO "context_switch 7 next %p\n", next);
-	//printk(KERN_INFO "context_switch 7 rf %p\n", rf);
-	//}
-	//struct timespec64 step3;
-	//ktime_get_real_ts64(&step3);
 
 	ret = finish_task_switch(prev);
-	//struct timespec64 end;
-	//if (ghost_policy(next->policy) || ghost_policy(prev->policy)) {
-	//printk(KERN_INFO "context_switch end rq %p\n", rq);
-	//printk(KERN_INFO "context_switch end prev %p\n", prev);
-	//printk(KERN_INFO "context_switch end next %p\n", next);
-	//printk(KERN_INFO "context_switch end rf %p\n", rf);
-	//}
-	//if (do_report_timing % 10000 == 0) {
-	//	ktime_get_real_ts64(&end);
-	//	struct timespec64 diff = timespec64_sub(end, start);
-	//	struct timespec64 diff1 = timespec64_sub(step1, start);
-	//	struct timespec64 diff2 = timespec64_sub(step2, step1);
-	//	struct timespec64 diff3 = timespec64_sub(step21, step2);
-	//	struct timespec64 diff4 = timespec64_sub(step22, step21);
-	//	struct timespec64 diff5 = timespec64_sub(step3, step22);
-	//	struct timespec64 diff6 = timespec64_sub(end, step3);
-	//	s64 ns_diff = timespec64_to_ns(&diff);
-	//	s64 ns_diff1 = timespec64_to_ns(&diff1);
-	//	s64 ns_diff2 = timespec64_to_ns(&diff2);
-	//	s64 ns_diff3 = timespec64_to_ns(&diff3);
-	//	s64 ns_diff4 = timespec64_to_ns(&diff4);
-	//	s64 ns_diff5 = timespec64_to_ns(&diff5);
-	//	s64 ns_diff6 = timespec64_to_ns(&diff6);
-	//	printk(KERN_INFO "context_switch diff %d, %d %d %d %d %d %d\n", ns_diff, ns_diff1, ns_diff2, ns_diff3, ns_diff4, ns_diff5, ns_diff6);
-	//      //do_report_timing = false;
-	//}
-	//report_timing += 1;
 	return ret;
 }
 
@@ -5023,10 +4784,6 @@ void scheduler_tick(void)
 	rq_unlock(rq, &rf);
 
 	perf_event_task_tick();
-
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	ghost_tick(rq);
-#endif
 
 #ifdef CONFIG_SMP
 	rq->idle_balance = idle_cpu(cpu);
@@ -5356,17 +5113,9 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 {
 	const struct sched_class *class;
 	struct task_struct *p;
-	//struct timespec64 start, end, step1, step2;
-	//ktime_get_real_ts64(&start);
-	//if (prev->policy == SCHED_GHOST) {
-	//	printk("Last was ghost, pick next task");
-	//}
 
 #ifdef CONFIG_SCHED_CLASS_GHOST
 	rq->ghost.check_prev_preemption = ghost_produce_prev_msgs(rq, prev);
-	//if (do_report_timing == 100000 && cpu_of(rq) == 0) {
-	//	printk("setting check_prev_preemption %d for %d", rq->ghost.check_prev_preemption, prev->pid);
-	//}
 
 	/* a negative 'switchto_count' indicates end of the chain */
 	rq->ghost.switchto_count = -rq->ghost.switchto_count;
@@ -5405,55 +5154,18 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 	}
 
 restart:
-	//if (prev->policy == SCHED_GHOST) {
-	//	printk("Last was ghost, balancing");
-	//}
 	put_prev_task_balance(rq, prev, rf);
 
-	//if (prev->policy == SCHED_GHOST) {
-	//	printk("Last was ghost, actually picking");
-	//}
 	for_each_class(class) {
 		p = class->pick_next_task(rq);
-		if (p) {
-			//if (p->policy == SCHED_GHOST && cpu_of(rq) == 1) {
-			//	printk(KERN_INFO "not giving ghost task");
-			//} else {
-				goto out_return;
-			//}
-		}
+		if (p)
+			goto out_return;
 	}
 
 	/* The idle class should always have a runnable task: */
 	BUG();
 
 out_return:
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	/*
-	 * pick_next_task opted to keep the same task running, but we left
-	 * check_prev_preemption on!  This will break switchto, which checks
-	 * that field during context_switch()
-	 */
-	//if (WARN_ON_ONCE(p == prev && rq->ghost.check_prev_preemption))
-	//	rq->ghost.check_prev_preemption = false;
-#endif
-	//ktime_get_real_ts64(&end);
-	//if (do_report_timing % 10000 == 0) {
-	//	struct timespec64 diff1 = timespec64_sub(step1, start);
-	//	struct timespec64 diff2 = timespec64_sub(step2, step1);
-	//	struct timespec64 diff3 = timespec64_sub(end, step2);
-	//	s64 ns_diff1 = timespec64_to_ns(&diff1);
-	//	s64 ns_diff2 = timespec64_to_ns(&diff2);
-	//	s64 ns_diff3 = timespec64_to_ns(&diff3);
-	//	if (p->policy == SCHED_GHOST) {
-	//		printk(KERN_INFO "ghost pnt diff %d %d %d\n", ns_diff1, ns_diff2, ns_diff3);
-	//	} else {
-	//		printk(KERN_INFO "pnt diff %d %d %d\n", ns_diff1, ns_diff2, ns_diff3);
-	//	}
-	////	report_timing += 1;
-      	//////do_report_timing = false;
-	//}
-
 	return p;
 }
 
@@ -5583,40 +5295,12 @@ static void __sched notrace __schedule(bool preempt)
 		}
 		switch_count = &prev->nvcsw;
 	}
-	//struct timespec64 step1;
-	//ktime_get_real_ts64(&step1);
 
 	next = pick_next_task(rq, prev, &rf);
-	//if (next->policy != SCHED_GHOST || cpu_of(rq) != 1) {
-	//struct timespec64 step15;
-	//ktime_get_real_ts64(&step15);
 	clear_tsk_need_resched(prev);
 	clear_preempt_need_resched();
-	//struct timespec64 step2;
-	//ktime_get_real_ts64(&step2);
-	//if (do_report_timing % 10000 == 0) {
-	//	ktime_get_real_ts64(&end);
-	//	struct timespec64 diff1 = timespec64_sub(step1, start);
-	//	struct timespec64 diff15 = timespec64_sub(step15, step1);
-	//	struct timespec64 diff2 = timespec64_sub(step2, step15);
-	//	s64 ns_diff1 = timespec64_to_ns(&diff1);
-	//	s64 ns_diff15 = timespec64_to_ns(&diff15);
-	//	s64 ns_diff2 = timespec64_to_ns(&diff2);
-	//	if (next->policy == SCHED_GHOST) {
-	//		printk(KERN_INFO "ghost early diff %d %d %d\n", ns_diff1, ns_diff15, ns_diff2);
-	//	} else {
-	//		printk(KERN_INFO "early diff %d %d %d\n", ns_diff1, ns_diff15, ns_diff2);
-	//	}
-	////	report_timing += 1;
-      	//////do_report_timing = false;
-	//}
-	//struct timespec64 step3;
-	//struct timespec64 step4;
 
 	if (likely(prev != next)) {
-		//if (do_report_timing > 0) {
-		//	printk(KERN_INFO "switching\n");
-		//}
 		rq->nr_switches++;
 		/*
 		 * RCU users of rcu_dereference(rq->curr) may not see
@@ -5637,52 +5321,23 @@ static void __sched notrace __schedule(bool preempt)
 		 * - switch_to() for arm64 (weakly-ordered, spin_unlock
 		 *   is a RELEASE barrier),
 		 */
-			++*switch_count;
+		++*switch_count;
 
-			migrate_disable_switch(rq, prev);
-			psi_sched_switch(prev, next, !task_on_rq_queued(prev));
+		migrate_disable_switch(rq, prev);
+		psi_sched_switch(prev, next, !task_on_rq_queued(prev));
 
-			trace_sched_switch(preempt, prev, next);
+		trace_sched_switch(preempt, prev, next);
 
 		/* Also unlocks the rq: */
-		//ktime_get_real_ts64(&step3);
-		//if (next->policy != SCHED_GHOST || cpu_of(rq) != 1) {
-			rq = context_switch(rq, prev, next, &rf);
-		//}
-		//ktime_get_real_ts64(&step4);
+		rq = context_switch(rq, prev, next, &rf);
 	} else {
-		//if (do_report_timing > 0 && next->policy == SCHED_GHOST) {
-		//	printk(KERN_INFO "not switching\n");
-		//}
 		rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
 
 		rq_unpin_lock(rq, &rf);
 		__balance_callbacks(rq);
 		raw_spin_unlock_irq(&rq->lock);
 	}
-	//	} else {
-	//		printk(KERN_INFO "didn't context switch");
-	//	}
 	schedule_callback(rq);
-	//if (do_report_timing % 10000 == 0) {
-	//	ktime_get_real_ts64(&end);
-	//	struct timespec64 diff = timespec64_sub(end, start);
-	//	struct timespec64 diff1 = timespec64_sub(step1, start);
-	//	struct timespec64 diff2 = timespec64_sub(step2, step1);
-	//	struct timespec64 diff3 = timespec64_sub(step3, step2);
-	//	struct timespec64 diff4 = timespec64_sub(step4, step3);
-	//	struct timespec64 diff5 = timespec64_sub(end, step4);
-	//	s64 ns_diff = timespec64_to_ns(&diff);
-	//	s64 ns_diff1 = timespec64_to_ns(&diff1);
-	//	s64 ns_diff2 = timespec64_to_ns(&diff2);
-	//	s64 ns_diff3 = timespec64_to_ns(&diff3);
-	//	s64 ns_diff4 = timespec64_to_ns(&diff4);
-	//	s64 ns_diff5 = timespec64_to_ns(&diff5);
-	//	printk(KERN_INFO "diff %d, %d %d %d %d %d \n", ns_diff, ns_diff1, ns_diff2, ns_diff3, ns_diff4, ns_diff5);
-	////	report_timing += 1;
-      	//////do_report_timing = false;
-	//}
-	//do_report_timing += 1;
 }
 
 void __noreturn do_task_dead(void)
@@ -5760,32 +5415,6 @@ asmlinkage __visible void __sched schedule(void)
 	sched_update_worker(tsk);
 }
 EXPORT_SYMBOL(schedule);
-
-#ifdef CONFIG_SCHED_CLASS_GHOST
-void ghost_agent_schedule(void)
-{
-	const int cpu = raw_smp_processor_id();
-
-	/* Verify that agent is voluntarily giving up CPU. */
-	VM_BUG_ON(this_rq()->ghost.agent != current);
-	VM_BUG_ON(current->state != TASK_RUNNING);
-
-	VM_BUG_ON(preempt_count() != PREEMPT_DISABLE_OFFSET);
-
-	__schedule(false);
-
-	VM_BUG_ON(preempt_count() != PREEMPT_DISABLE_OFFSET);
-	VM_BUG_ON(this_rq()->ghost.blocked_in_run);
-
-	/*
-	 * The agent is per-cpu and must always schedule on that CPU.
-	 *
-	 * In other words it cannot __schedule() on one CPU and wake up
-	 * on a different one.
-	 */
-	VM_BUG_ON(this_rq()->cpu != cpu);
-}
-#endif
 
 /*
  * synchronize_rcu_tasks() makes sure that no task is stuck in preempted
@@ -6072,7 +5701,6 @@ void rt_mutex_setprio(struct task_struct *p, struct task_struct *pi_task)
 	queued = task_on_rq_queued(p);
 	running = task_current(rq, p);
 	if (queued) {
-		//printk(KERN_INFO "mutex_setprio\n");
 		dequeue_task(rq, p, queue_flag);
 	}
 	if (running)
@@ -6165,7 +5793,6 @@ void set_user_nice(struct task_struct *p, long nice)
 	queued = task_on_rq_queued(p);
 	running = task_current(rq, p);
 	if (queued) {
-		//printk(KERN_INFO "set_user_nice\n");
 		dequeue_task(rq, p, DEQUEUE_SAVE | DEQUEUE_NOCLOCK);
 	}
 	if (running)
@@ -6331,21 +5958,10 @@ static void __setscheduler_params(struct task_struct *p,
 	if (policy == SETPARAM_POLICY)
 		policy = p->policy;
 
-//	if (ghost_policy(policy)) {
-//		p->policy = SCHED_GHOST;
-//	} else {
-		p->policy = policy;
-//	}
+	p->policy = policy;
 
 #ifdef CONFIG_SCHED_CLASS_GHOST
 	if (ghost_policy(policy)) {
-		//if (ghost_agent(attr)) {
-		//	/*
-		//	 * This might catch an unlock in between
-		//	 * ghost_setscheduler() and here.
-		//	 */
-		//	WARN_ON_ONCE(task_rq(p)->ghost.agent != p);
-		//}
 		p->rt_priority = 0;
 		p->normal_prio = normal_prio(p);
 		set_load_weight(p, true);
@@ -6391,7 +6007,6 @@ static void __setscheduler(struct rq *rq, struct task_struct *p,
 
 #ifdef CONFIG_SCHED_CLASS_GHOST
 	if (ghost_policy(attr->sched_policy)) {
-		//printk(KERN_INFO "setting sched policy");
 		p->sched_class = &ghost_sched_class;
 		return;
 	}
@@ -6435,14 +6050,9 @@ static int __sched_setscheduler(struct task_struct *p,
 	int reset_on_fork;
 	int queue_flags = DEQUEUE_SAVE | DEQUEUE_MOVE | DEQUEUE_NOCLOCK;
 	struct rq *rq;
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	//struct ghost_enclave *new_e;
-	struct fd f_enc;
-#endif
 
 	/* The pi code expects interrupts enabled */
 	BUG_ON(pi && in_interrupt());
-	//printk(KERN_INFO "setting scheduler");
 recheck:
 	/* Double check policy once rq lock held: */
 	if (policy < 0) {
@@ -6458,14 +6068,6 @@ recheck:
 	if (attr->sched_flags & ~(SCHED_FLAG_ALL | SCHED_FLAG_SUGOV))
 		return -EINVAL;
 
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	if (ghost_policy(policy)) {
-		//printk(KERN_INFO "yes ghost policy");
-		retval = ghost_validate_sched_attr(attr);
-		if (retval)
-			return retval;
-	} else
-#endif
 	{
 		/*
 		 * Valid priorities for SCHED_FIFO and SCHED_RR are
@@ -6479,7 +6081,6 @@ recheck:
 		    (rt_policy(policy) != (attr->sched_priority != 0)))
 			return -EINVAL;
 	}
-	//printk(KERN_INFO "setscheduler 1");
 
 	/*
 	 * Allow unprivileged RT tasks to decrease priority:
@@ -6531,7 +6132,6 @@ recheck:
 		if (p->sched_reset_on_fork && !reset_on_fork)
 			return -EPERM;
 	}
-	//printk(KERN_INFO "setscheduler 2");
 
 	if (user) {
 		if (attr->sched_flags & SCHED_FLAG_SUGOV)
@@ -6541,7 +6141,6 @@ recheck:
 		if (retval)
 			return retval;
 	}
-	//printk(KERN_INFO "setscheduler 3");
 
 	/* Update task specific "requested" clamps */
 	if (attr->sched_flags & SCHED_FLAG_UTIL_CLAMP) {
@@ -6552,7 +6151,6 @@ recheck:
 
 	if (pi)
 		cpuset_read_lock();
-	//printk(KERN_INFO "setscheduler 4");
 
 	/*
 	 * Make sure no PI-waiters arrive (or leave) while we are
@@ -6564,7 +6162,6 @@ recheck:
 	rq = task_rq_lock(p, &rf);
 	update_rq_clock(rq);
 
-	//if (!ghost_policy(policy)) {
 	/*
 	 * Changing the policy of the stop threads its a very bad idea:
 	 */
@@ -6573,7 +6170,6 @@ recheck:
 		goto unlock;
 	}
 
-	//printk(KERN_INFO "setscheduler 5");
 	/*
 	 * If not changing anything there's no need to proceed further,
 	 * but store a possible modification of reset_on_fork.
@@ -6601,10 +6197,8 @@ recheck:
 		retval = 0;
 		goto unlock;
 	}
-	//}
 change:
 
-	//printk(KERN_INFO "setscheduler 6");
 	if (user) {
 #ifdef CONFIG_RT_GROUP_SCHED
 		/*
@@ -6636,7 +6230,6 @@ change:
 		}
 #endif
 	}
-	//printk(KERN_INFO "setscheduler 7");
 
 	/* Re-check policy now with rq lock held: */
 	if (unlikely(oldpolicy != -1 && oldpolicy != p->policy)) {
@@ -6656,18 +6249,9 @@ change:
 		retval = -EBUSY;
 		goto unlock;
 	}
-	//printk(KERN_INFO "setscheduler 8");
 
 #ifdef CONFIG_SCHED_CLASS_GHOST
-	//if (ghost_policy(policy)) {
-	//	//new_e = ghost_fdget_enclave(ghost_schedattr_to_enclave_fd(attr),
-	//	//			    &f_enc);
-	//	new_e = NULL;
-	//} else {
-	//	new_e = NULL;
-	//}
 	if (ghost_policy(policy) || ghost_policy(p->policy)) {
-		//printk(KERN_INFO "setting ghost scheduler");
 		int error = ghost_setscheduler(p, rq, attr,
 					       &reset_on_fork);
 
@@ -6675,8 +6259,6 @@ change:
 			task_rq_unlock(rq, p, &rf);
 			if (pi)
 				cpuset_read_unlock();
-			//if (ghost_policy(policy))
-			//	ghost_fdput_enclave(new_e, &f_enc);
 			return error;
 		}
 	}
@@ -6706,7 +6288,6 @@ change:
 	queued = task_on_rq_queued(p);
 	running = task_current(rq, p);
 	if (queued) {
-		//printk(KERN_INFO "setscheduler\n");
 		dequeue_task(rq, p, queue_flags);
 	}
 	if (running)
@@ -6748,11 +6329,6 @@ change:
 	balance_callbacks(rq, head);
 	preempt_enable();
 
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	//if (ghost_policy(policy))
-		//ghost_fdput_enclave(new_e, &f_enc);
-#endif
-
 	return 0;
 
 unlock:
@@ -6770,7 +6346,6 @@ static int _sched_setscheduler(struct task_struct *p, int policy,
 		.sched_priority = param->sched_priority,
 		.sched_nice	= PRIO_TO_NICE(p->static_prio),
 	};
-	//printk(KERN_INFO "in _sched_setscheduler");
 
 	/* Fixup the legacy SCHED_RESET_ON_FORK hack. */
 	if ((policy != SETPARAM_POLICY) && (policy & SCHED_RESET_ON_FORK)) {
@@ -6796,7 +6371,6 @@ static int _sched_setscheduler(struct task_struct *p, int policy,
 int sched_setscheduler(struct task_struct *p, int policy,
 		       const struct sched_param *param)
 {
-	//printk(KERN_INFO "in sched_setscheduler");
 	return _sched_setscheduler(p, policy, param, true);
 }
 
@@ -7944,7 +7518,6 @@ void sched_setnuma(struct task_struct *p, int nid)
 	running = task_current(rq, p);
 
 	if (queued) {
-		//printk(KERN_INFO "sched_setnuma\n");
 		dequeue_task(rq, p, DEQUEUE_SAVE);
 	}
 	if (running)
@@ -8413,9 +7986,6 @@ void __init sched_init_smp(void)
 
 	init_sched_rt_class();
 	init_sched_dl_class();
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	init_sched_ghost_class();
-#endif
 
 	sched_smp_initialized = true;
 }
@@ -8462,15 +8032,11 @@ void __init sched_init(void)
 	int i;
 
 	/* Make sure the linker didn't screw up */
-	//BUG_ON(&fair_sched_class + 1 != &rt_sched_class ||
-	 //      &rt_sched_class + 1   != &dl_sched_class);
 #ifdef CONFIG_SCHED_CLASS_GHOST
 	BUG_ON(&fair_sched_class + 1 != &ghost_sched_class ||
 	       &ghost_sched_class + 1   != &rt_sched_class);
 	BUG_ON(&ghost_sched_class + 1 != &rt_sched_class ||
 	       &rt_sched_class + 1 != &dl_sched_class );
-	       //&dl_sched_class + 1 != &ghost_agent_sched_class ||
-	       //&ghost_agent_sched_class + 1 != &stop_sched_class);
 	BUG_ON(&idle_sched_class + 1 != &fair_sched_class);
 #else
 	BUG_ON(&fair_sched_class + 1 != &rt_sched_class ||
@@ -9008,7 +8574,6 @@ void sched_move_task(struct task_struct *tsk)
 	queued = task_on_rq_queued(tsk);
 
 	if (queued) {
-		//printk(KERN_INFO "sched_move_task\n");
 		dequeue_task(rq, tsk, queue_flags);
 	}
 	if (running)
@@ -9886,20 +9451,6 @@ struct cgroup_subsys cpu_cgrp_subsys = {
 };
 
 #endif	/* CONFIG_CGROUP_SCHED */
-
-#ifndef CONFIG_SCHED_CLASS_GHOST
-SYSCALL_DEFINE5(ghost_run, s64, gtid, u32, agent_barrier, u32, task_barrier,
-                int, run_cpu, int, run_flags)
-{
-	return -ENOSYS;
-}
-
-SYSCALL_DEFINE6(ghost, u64, op, u64, arg1, u64, arg2, u64, arg3, u64, arg4,
-                u64, arg5)
-{
-	return -ENOSYS;
-}
-#endif
 
 void dump_cpu_task(int cpu)
 {

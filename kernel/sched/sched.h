@@ -123,7 +123,6 @@ struct ghost_rq {
 	uint64_t cpu_seqnum;		/* history for msgs about this cpu */
 
 	/* For deferring work to the balance_callback */
-	struct list_head enclave_work;	/* work to do */
 	struct callback_head ew_head;	/* callback management */
 
 	struct list_head tasks;
@@ -147,185 +146,38 @@ struct ghost_rq {
 			void *payload, int payload_size);
 };
 
-struct ghost_sw_region {
-	struct list_head list;			/* ghost_enclave glue */
-	uint32_t alloc_scan_start;		/* allocator starts scan here */
-	struct ghost_sw_region_header *header;	/* pointer to vmalloc memory */
-	size_t mmap_sz;				/* size of mmapped region */
-	struct ghost_enclave *enclave;
-};
-
-//#define GHOST_MAX_SW_REGIONS	64
-/*#define GHOST_CPU_DATA_REGION_SIZE \
-	(sizeof(struct ghost_cpu_data) * num_possible_cpus()) */
-
-//struct enclave_work {
-//	struct list_head link;
-//	unsigned int nr_decrefs;
-//	bool run_task_reaper;
-//};
-
-/*
- * ghost_enclave is a container for the agents, queues and sw_regions
- * that express the scheduling policy for a set of CPUs.
- */
-//struct ghost_enclave {
-//	/*
-//	 * 'lock' serializes mutation of 'sw_region_list' as well as
-//	 * allocation and freeing of status words within a region.
-//	 *
-//	 * 'lock' also serializes mutation of 'def_q'.
-//	 *
-//	 * 'lock' requires the irqsave variant of spin_lock because
-//	 * it is called in code paths with the 'rq->lock' held and
-//	 * interrupts disabled.
-//	 */
-//	spinlock_t lock;
-//	struct kref kref;
-//	struct list_head sw_region_list;
-//	ulong sw_region_ids[BITS_TO_LONGS(GHOST_MAX_SW_REGIONS)];
-//
-//	struct ghost_cpu_data **cpu_data;
-//	struct cpumask cpus;
-//
-//	struct ghost_queue *def_q;	/* default queue */
-//
-//	struct list_head inhibited_task_list;
-//	struct list_head task_list;	/* all non-agent tasks in the enclave */
-//	unsigned long nr_tasks;
-//	struct work_struct task_reaper;
-//	struct enclave_work ew;		/* to defer work while holding locks */
-//	struct work_struct enclave_actual_release;/* work for enclave_release */
-//
-//	/*
-//	 * max_unscheduled: How long a task can be runnable, but unscheduled,
-//	 * before the kernel thinks the enclave failed and queues the
-//	 * enclave_destroyer.
-//	 */
-//	ktime_t max_unscheduled;
-//	struct work_struct enclave_destroyer;
-//
-//	bool switchto_disabled;
-//	bool wake_on_waker_cpu;
-//	bool commit_at_tick;
-//
-//	unsigned long id;
-//	int is_dying;
-//	bool agent_online;		/* userspace says agent can schedule. */
-//	struct kernfs_node *enclave_dir;
-//
-//#ifdef CONFIG_BPF
-//	struct bpf_prog *bpf_tick;
-//	struct bpf_prog *bpf_pnt;
-//	struct bpf_prog *bpf_msg_send;
-//#endif
-//};
-
-/* In kernel/sched/ghostfs.c */
-extern struct ghost_enclave *ghostfs_ctl_to_enclave(struct file *f);
-extern void ghostfs_put_enclave_ctl(struct file *f);
-extern void ghostfs_remove_enclave(struct ghost_enclave *e);
 
 /* In kernel/sched/ghost.c */
 extern bool ghost_produce_prev_msgs(struct rq *rq, struct task_struct *prev);
-extern struct ghost_enclave *ghost_create_enclave(void);
-//extern void enclave_release(struct kref *k);
-//extern void ghost_destroy_enclave(struct ghost_enclave *e);
-//extern int ghost_enclave_set_cpus(struct ghost_enclave *e,
-//				  const struct cpumask *cpus);
 extern int ghost_region_mmap(struct file *file, struct vm_area_struct *vma,
 			     void *addr, ulong mapsize);
-extern int ghost_cpu_data_mmap(struct file *file, struct vm_area_struct *vma,
-			       struct ghost_cpu_data **cpu_data, ulong mapsize);
-//extern struct ghost_sw_region *ghost_create_sw_region(struct ghost_enclave *e,
-//						      unsigned int id,
-//						      unsigned int node);
-//extern int ghost_sw_get_info(struct ghost_enclave *e,
-//			     struct ghost_ioc_sw_get_info __user *arg);
-//extern int ghost_sw_free(struct ghost_enclave *e,
-//			 struct ghost_sw_info __user *uinfo);
-//extern int ghost_create_queue(struct ghost_enclave *e,
-//			      struct ghost_ioc_create_queue __user *arg);
-extern int bento_create_queue(int policy,
-			      struct bento_ioc_create_queue __user *arg);
-extern int bento_create_reverse_queue(int policy,
-			      struct bento_ioc_create_queue __user *arg);
-extern int bento_enter_queue(int policy,
-			      struct bento_ioc_enter_queue __user *arg);
-extern int bento_create_record(int policy,
-			      struct bento_ioc_create_queue __user *arg);
-extern int bento_create_top_record(
-			      struct bento_ioc_create_queue __user *arg);
-extern int ekiben_send_hint(int policy,
+extern int enoki_create_queue(int policy,
+			      struct enoki_ioc_create_queue __user *arg);
+extern int enoki_create_reverse_queue(int policy,
+			      struct enoki_ioc_create_queue __user *arg);
+extern int enoki_enter_queue(int policy,
+			      struct enoki_ioc_enter_queue __user *arg);
+extern int enoki_create_record(int policy,
+			      struct enoki_ioc_create_queue __user *arg);
+extern int enoki_create_top_record(
+			      struct enoki_ioc_create_queue __user *arg);
+extern int enoki_send_hint(int policy,
 			      void __user *arg);
-//extern int ghost_associate_queue(struct ghost_ioc_assoc_queue __user *arg);
-extern int ghost_set_default_queue(
-			struct ghost_ioc_set_default_queue __user *arg);
-extern int ghost_config_queue_wakeup(
-			struct ghost_ioc_config_queue_wakeup __user *arg);
-extern int ghost_get_cpu_time(struct ghost_ioc_get_cpu_time __user *arg);
-extern int ioctl_ghost_commit_txn(
-				 struct ghost_ioc_commit_txn __user *arg);
-extern int ghost_sync_group(
-			    struct ghost_ioc_commit_txn __user *arg);
-extern int ghost_timerfd_settime(struct ghost_ioc_timerfd_settime __user *arg);
-//extern struct ghost_enclave *ghost_fdget_enclave(int fd, struct fd *fd_to_put);
-//extern void ghost_fdput_enclave(struct ghost_enclave *e, struct fd *fd_to_put);
-
-extern void init_sched_ghost_class(void);
 extern void init_ghost_rq(struct ghost_rq *ghost_rq);
-extern bool ghost_agent(const struct sched_attr *attr);
-extern int ghost_validate_sched_attr(const struct sched_attr *attr);
 extern int ghost_setscheduler(struct task_struct *p, struct rq *rq,
 			      const struct sched_attr *attr,
-		//	      struct ghost_enclave *new_e,
 			      int *reset_on_fork);
 extern int ghost_sched_fork(struct task_struct *p);
-extern void ghost_sched_cleanup_fork(struct task_struct *p);
 extern void ghost_latched_task_preempted(struct rq *rq);
 extern void ghost_task_preempted(struct rq *rq, struct task_struct *prev);
 extern void ghost_task_got_oncpu(struct rq *rq, struct task_struct *p);
 extern unsigned long ghost_cfs_added_load(struct rq *rq);
-extern int ghost_wake_agent_on_check(int cpu);
-extern void ghost_wake_agent_of(struct task_struct *p);
-extern void ghost_agent_schedule(void);
-//extern int ghost_run_pid_on(s64 gtid, u32 task_barrier, int run_flags,
-//			     int cpu);
-//extern int ghost_run_gtid_on_check(s64 gtid, u32 task_barrier, int run_flags,
-//				   int cpu);
 extern void ghost_cpu_idle(void);
 
 extern int setup_sched_ioctl(int policy);
 
 struct rq_flags;
-#ifdef CONFIG_BPF
-//extern bool ghost_bpf_skip_tick(struct ghost_enclave *e, struct rq *rq);
-//extern void ghost_bpf_pnt(struct ghost_enclave *e, struct rq *rq,
-//			  struct rq_flags *rf);
-//extern bool ghost_bpf_msg_send(struct ghost_enclave *e,
-//			       struct bpf_ghost_msg *msg);
-#else
-//static inline bool ghost_bpf_skip_tick(struct ghost_enclave *e, struct rq *rq)
-//{
-//	return false;
-//}
-//static inline void ghost_bpf_pnt(struct ghost_enclave *e, struct rq *rq,
-//				 struct rq_flags *rf)
-//{
-//}
-//static inline bool ghost_bpf_msg_send(struct ghost_enclave *e,
-//				      struct bpf_ghost_msg *msg)
-//{
-//	return true;
-//}
-#endif
 
-extern void ghost_wait_for_rendezvous(struct rq *rq);
-extern void ghost_need_cpu_not_idle(struct rq *rq, struct task_struct *next,
-		struct task_struct *prev);
-extern void ghost_tick(struct rq *rq);
-extern int64_t ghost_alloc_gtid(struct task_struct *p);
-//extern void ghost_initialize_status_word(struct task_struct *p);
 extern void ghost_task_new(struct rq *rq, struct task_struct *p);
 extern void ghost_switchto(struct rq *rq, struct task_struct *prev,
 			   struct task_struct *next, int switchto_flags);
@@ -335,37 +187,6 @@ static inline void sched_ghost_entity_init(struct task_struct *p)
 	memset(&p->ghost, 0, sizeof(p->ghost));
 	INIT_LIST_HEAD(&p->ghost.run_list);
 	INIT_LIST_HEAD(&p->ghost.task_list);
-}
-
-//static inline void ghost_sw_set_flag(struct ghost_status_word *sw,
-//				     uint32_t flag) {
-//	smp_store_release(&sw->flags, sw->flags | flag);
-//}
-//
-//static inline void ghost_sw_clear_flag(struct ghost_status_word *sw,
-//				       uint32_t flag) {
-//	smp_store_release(&sw->flags, sw->flags & ~flag);
-//}
-//
-//static inline void ghost_sw_set_time(struct ghost_status_word *sw,
-//				     s64 time) {
-//	/*
-//	 * Do a relaxed store since userspace syncs with the release store to
-//         * `sw->flags` for setting the oncpu bit in `ghost_sw_set_flag`. We set
-//         * the time in this function before setting the oncpu bit, so we use
-//         * that release store as a barrier.
-//	 */
-//	WRITE_ONCE(sw->switch_time, time);
-//}
-
-static inline int ghost_schedattr_to_enclave_fd(const struct sched_attr *attr)
-{
-	return attr->sched_runtime;
-}
-
-static inline int ghost_schedattr_to_queue_fd(const struct sched_attr *attr)
-{
-	return attr->sched_deadline;
 }
 
 #else
@@ -702,10 +523,6 @@ struct task_group {
 #endif
 
 	struct cfs_bandwidth	cfs_bandwidth;
-
-#ifdef CONFIG_SCHED_CLASS_GHOST
-	bool ghost_enabled;
-#endif
 
 #ifdef CONFIG_UCLAMP_TASK_GROUP
 	/* The two decimal precision [%] value requested from user-space */
@@ -2236,57 +2053,10 @@ extern const struct sched_class ghost_sched_class;
 extern const struct sched_class fair_sched_class;
 extern const struct sched_class idle_sched_class;
 #ifdef CONFIG_SCHED_CLASS_GHOST
-extern const struct sched_class ghost_agent_sched_class;
 
 static inline bool ghost_class(const struct sched_class *class)
 {
 	return class == &ghost_sched_class;
-}
-
-bool is_agent(struct rq *rq, struct task_struct *p);
-
-/*
- * Contents of rq->ghost.rendezvous field: <sign|cpu_num|poison|counter>
- *
- * We have 1 bit for <sign>, 11 bits for <cpu_num>, 1 bit for <poison> and
- * 51 bits for <counter>
- *
- * Assuming a call rate of once per usec we get ~71 years before
- * the 51-bit counter overflows.
- */
-#define GHOST_NO_RENDEZVOUS		0
-#define GHOST_POISONED_RENDEZVOUS	(1LL << 51)
-
-static inline bool rendezvous_reached(int64_t target)
-{
-	return target >= 0;
-}
-
-static inline bool rendezvous_poisoned(int64_t target)
-{
-	if (rendezvous_reached(target)) {
-		/*
-		 * We must have reached rendezvous before evaluating whether
-		 * or not it is poisoned. This is actually an important check
-		 * to avoid a false positive (an in-progress rendezvous is a
-		 * negative number and GHOST_POISONED_RENDEZVOUS bit is set).
-		 *
-		 * For e.g. -2 is 0xfffffffffffffffe
-		 */
-		return target & GHOST_POISONED_RENDEZVOUS;
-	}
-	return false;
-}
-
-static inline bool ghost_need_rendezvous(struct rq *rq)
-{
-	int64_t r;
-
-	if (!ghost_class(rq->curr->sched_class))
-		return false;
-
-	r = smp_load_acquire(&rq->ghost.rendezvous);
-	return !rendezvous_reached(r) || rendezvous_poisoned(r);
 }
 
 static inline bool skip_fair_idle_balance(struct cfs_rq *cfs_rq,

@@ -134,7 +134,6 @@
 	*(__ghost_sched_class)			\
 	*(__rt_sched_class)			\
 	*(__dl_sched_class)			\
-	*(__ghost_agent_sched_class)		\
 	*(__stop_sched_class)			\
 	__end_sched_classes = .;
 #else

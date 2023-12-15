@@ -200,8 +200,6 @@ enum bpf_prog_type {
 	BPF_PROG_TYPE_EXT,
 	BPF_PROG_TYPE_LSM,
 	BPF_PROG_TYPE_SK_LOOKUP,
-	BPF_PROG_TYPE_GHOST_SCHED = 35,
-	BPF_PROG_TYPE_GHOST_MSG,
 };
 
 enum bpf_attach_type {
@@ -243,9 +241,6 @@ enum bpf_attach_type {
 	BPF_XDP_CPUMAP,
 	BPF_SK_LOOKUP,
 	BPF_XDP,
-	BPF_GHOST_SCHED_SKIP_TICK = 50,
-	BPF_GHOST_SCHED_PNT,
-	BPF_GHOST_MSG_SEND,
 	__MAX_BPF_ATTACH_TYPE
 };
 
@@ -3835,20 +3830,6 @@ union bpf_attr {
  *	Return
  *		A pointer to a struct socket on success or NULL if the file is
  *		not a socket.
- *
- * long bpf_ghost_wake_agent(u32 cpu)
- *	Description
- *		Wakes the ghost agent on *cpu*
- *
- *	Return
- *		0 on success, < 0 on error.
- *
- * long bpf_ghost_run_gtid(s64 gtid, u32 task_barrier, s32 run_flags)
- *	Description
- *		Runs (latches) task **gtid** on this cpu.
- *
- *	Return
- *		0 on success, < 0 on error.
  */
 #define __BPF_FUNC_MAPPER(FN)		\
 	FN(unspec),			\
@@ -4055,8 +4036,6 @@ union bpf_attr {
 	FN(placeholder_037),		\
 	FN(placeholder_038),		\
 	FN(placeholder_039),		\
-	FN(ghost_wake_agent),		\
-	FN(ghost_run_gtid),		\
 	/* */
 
 /* integer value in 'imm' field of BPF_CALL instruction selects which helper
@@ -5211,9 +5190,6 @@ enum {
 	BTF_F_NONAME	=	(1ULL << 1),
 	BTF_F_PTR_RAW	=	(1ULL << 2),
 	BTF_F_ZERO	=	(1ULL << 3),
-};
-
-struct bpf_ghost_sched {
 };
 
 #endif /* _UAPI__LINUX_BPF_H__ */
